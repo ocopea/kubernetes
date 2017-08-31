@@ -1,0 +1,40 @@
+{
+  "name":"lets chat",
+  "version":"1.0",
+  "description":"Lets chat cool app",
+  "entryPointServiceName":"lets-chat",
+  "appServiceTemplates":[
+    {
+      "appServiceName":"lets-chat",
+      "psbType":"k8s",
+      "imageName":"sdelements/lets-chat",
+      "imageType":"nodejs",
+      "imageVersion":"latest",
+      "psbSettings":{
+
+      },
+      "environmentVariables":{
+        "LCB_DATABASE_URI":"mongodb://${chat-db.server}/letschat"
+      },
+      "dependencies":[
+        {
+          "type":"DATABASE",
+          "name":"chat-db",
+          "description":"Chats database",
+          "protocols":[
+            {
+              "protocolName":"mongodb",
+              "version":null,
+              "conditions":null
+            }
+          ]
+        }
+      ],
+      "exposedPorts":[
+        8080
+      ],
+      "httpPort":8080,
+      "entryPointUrl":"login"
+    }
+  ]
+}

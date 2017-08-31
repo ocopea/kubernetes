@@ -7,19 +7,19 @@
 package client
 
 import (
-	"net/http"
+	"bufio"
+	"bytes"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"ocopea/kubernetes/client/v1"
-	"bytes"
-	"encoding/json"
 	"io"
 	"io/ioutil"
+	"log"
+	"net/http"
+	"ocopea/kubernetes/client/v1"
 	"time"
-	"crypto/x509"
-	"bufio"
 )
 
 type Client struct {
@@ -39,7 +39,7 @@ func NewClient(url string, namespace string, userName string, password string, c
 	var caCertPool *x509.CertPool = nil
 	log.Println("here1")
 	sslToken := ""
-	if (certificatePath != "") {
+	if certificatePath != "" {
 		log.Println("here2")
 
 		caCert, err := ioutil.ReadFile(certificatePath)
@@ -57,18 +57,17 @@ func NewClient(url string, namespace string, userName string, password string, c
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-
 	}
 	httpClient := http.Client{Transport: tr}
-	c := &Client{Url:url, Namespace:namespace, httpClient:httpClient, UserName:userName, Password:password, SslToken:sslToken}
+	c := &Client{Url: url, Namespace: namespace, httpClient: httpClient, UserName: userName, Password: password, SslToken: sslToken}
 
 	r, err := c.doHttpNoNS("GET", "", nil)
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 
 	defer r.Body.Close()
-	if (r.StatusCode == 200) {
+	if r.StatusCode == 200 {
 		return c, nil
 	} else {
 		return nil, errors.New(fmt.Sprintf("Failed testing k8s connection, received status %s", r.Status))
@@ -92,19 +91,19 @@ func (c *Client) structToReader(s interface{}) (io.Reader, error) {
 	enc := json.NewEncoder(b)
 	// Encoding
 	//todo:go: should it be "go enc.Encode" if buff fills allow streaming?
-	err := enc.Encode(s);
+	err := enc.Encode(s)
 	return b, err
 
 }
 
 func (c *Client) CheckServiceExists(serviceName string) (bool, error) {
-	resp, err := c.doHttp("GET", "services/" + serviceName, nil)
-	if (err != nil) {
+	resp, err := c.doHttp("GET", "services/"+serviceName, nil)
+	if err != nil {
 		return false, fmt.Errorf("Failed getting k8s service info for service %s - %s", serviceName, err.Error())
 	}
-	if (resp.StatusCode == http.StatusNotFound) {
+	if resp.StatusCode == http.StatusNotFound {
 		return false, nil
-	} else if (resp.StatusCode == http.StatusOK) {
+	} else if resp.StatusCode == http.StatusOK {
 		return true, nil
 	} else {
 		log.Printf("Unexpected response status when checking service %s - %s", serviceName, resp.Status)
@@ -125,7 +124,7 @@ func (c *Client) createEntity(entityTypeName string, entityName string, entityTo
 	httpMethod := "POST"
 	resourceName := entityTypeName + "/" + entityName
 
-	r, err := c.structToReader(entityToCreatePtr);
+	r, err := c.structToReader(entityToCreatePtr)
 	if err != nil {
 		return fmt.Errorf("Failed formatting entity %s to json - %s", resourceName, err.Error())
 	}
@@ -136,13 +135,13 @@ func (c *Client) createEntity(entityTypeName string, entityName string, entityTo
 		resp, err = c.doHttpNoNS(httpMethod, entityTypeName, r)
 	}
 
-	if (err != nil) {
+	if err != nil {
 		return fmt.Errorf("Failed creating k8s entity %s - %s", resourceName, err.Error())
 	}
 
 	defer resp.Body.Close()
 
-	if (resp.StatusCode != http.StatusCreated) {
+	if resp.StatusCode != http.StatusCreated {
 
 		// We support create force meaning we are fine if already exist
 		if resp.StatusCode == http.StatusConflict && force {
@@ -165,14 +164,14 @@ func (c *Client) createEntity(entityTypeName string, entityName string, entityTo
 
 		//todo: only do on debug - is there a go shit to do that? if debug?
 		_, err = json.MarshalIndent(responseEntityPtr, "", "    ")
-		if (err != nil) {
+		if err != nil {
 			log.Printf("Failed parsing json for response of created entity %s - %s\n", resourceName, err.Error())
 		} else {
 			//log.Printf("%s on %s returned\n%s\n", httpMethod, resourceName, string(str))
 		}
 	}
 
-	return nil;
+	return nil
 
 }
 
@@ -191,25 +190,25 @@ func (c *Client) CreatePersistentVolume(pv *v1.PersistentVolume, force bool) (*v
 func (c *Client) ListPodsInfo(labelFilters map[string]string) ([]*v1.Pod, error) {
 
 	respPodList := &v1.PodList{}
-	err := c.getEntityInfo("pods" + buildLabelsQueryString(labelFilters), "", respPodList)
+	err := c.getEntityInfo("pods"+buildLabelsQueryString(labelFilters), "", respPodList)
 	// Listing all services in namespace
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed listing k8s pods - %s", err.Error())
 	}
 	podList := make([]*v1.Pod, 0)
-	if (respPodList.Items != nil) {
+	if respPodList.Items != nil {
 		for i := range respPodList.Items {
-//			if (doesObjectHaveAllLabels(&respPodList.Items[i].ObjectMeta, labelFilters)) {
-				podList = append(podList, &respPodList.Items[i])
-//			}
+			//			if (doesObjectHaveAllLabels(&respPodList.Items[i].ObjectMeta, labelFilters)) {
+			podList = append(podList, &respPodList.Items[i])
+			//			}
 		}
 	}
-	return podList, nil;
+	return podList, nil
 }
 
 func buildLabelsQueryString(labelFilters map[string]string) string {
 	queryString := ""
-	if (labelFilters != nil) {
+	if labelFilters != nil {
 		for labelKey, labelValue := range labelFilters {
 			if queryString == "" {
 				queryString = "?labelSelector="
@@ -224,7 +223,7 @@ func buildLabelsQueryString(labelFilters map[string]string) string {
 }
 
 func doesObjectHaveAllLabels(meta *v1.ObjectMeta, labelFilters map[string]string) bool {
-	if (labelFilters != nil) {
+	if labelFilters != nil {
 		for labelKey, labelValue := range labelFilters {
 			if meta.Labels[labelKey] != labelValue {
 				return false
@@ -239,21 +238,21 @@ func (c *Client) ListServiceInfo(labelFilters map[string]string) ([]*v1.Service,
 	respSvcList := &v1.ServiceList{}
 	// Listing all services in namespace
 	err := c.getEntityInfo("services", "", respSvcList)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed listing k8s services - %s", err.Error())
 	}
 
 	// Filtering
 	svcList := make([]*v1.Service, 0)
-	if (respSvcList.Items != nil) {
+	if respSvcList.Items != nil {
 		for i := range respSvcList.Items {
-			if (doesObjectHaveAllLabels(&respSvcList.Items[i].ObjectMeta, labelFilters)) {
+			if doesObjectHaveAllLabels(&respSvcList.Items[i].ObjectMeta, labelFilters) {
 				svcList = append(svcList, &respSvcList.Items[i])
 			}
 		}
 	}
 
-	return svcList, nil;
+	return svcList, nil
 
 }
 
@@ -262,20 +261,20 @@ func (c *Client) ListNamespaceInfo(labelFilters map[string]string) ([]*v1.Namesp
 	respNsList := &v1.NamespaceList{}
 	// Listing all services in namespace
 	err := c.getEntityInfo("namespaces", "", respNsList)
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 
 	nscList := make([]*v1.Namespace, 0)
-	if (respNsList.Items != nil) {
+	if respNsList.Items != nil {
 		for i := range respNsList.Items {
-			if (doesObjectHaveAllLabels(&respNsList.Items[i].ObjectMeta, labelFilters)) {
+			if doesObjectHaveAllLabels(&respNsList.Items[i].ObjectMeta, labelFilters) {
 				nscList = append(nscList, &respNsList.Items[i])
 			}
 		}
 	}
 
-	return nscList, nil;
+	return nscList, nil
 
 }
 
@@ -286,30 +285,29 @@ func (c *Client) GetServiceInfo(serviceName string) (*v1.Service, error) {
 }
 
 func (c *Client) GetPersistentVolumeInfo(persistentVolumeName string) (*v1.PersistentVolume, error) {
-	resp, err := c.doHttpNoNS("GET", "persistentvolumes/" + persistentVolumeName, nil)
-	if (err != nil) {
+	resp, err := c.doHttpNoNS("GET", "persistentvolumes/"+persistentVolumeName, nil)
+	if err != nil {
 		return nil, fmt.Errorf("Failed getting pv info for pv %s - %s", persistentVolumeName, err.Error())
 	}
-	var respPv v1.PersistentVolume;
+	var respPv v1.PersistentVolume
 	dec := json.NewDecoder(resp.Body)
 	err = dec.Decode(&respPv)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed decoding pv %s - %s", persistentVolumeName, err.Error())
 	}
 
-
 	//todo: only do on debug - is there a go shit to do that? if debug?
 	str, err := json.MarshalIndent(respPv, "", "    ")
-	if (err != nil) {
+	if err != nil {
 		log.Println(err)
 	}
 	log.Println(string(str))
 
-	if (resp.StatusCode != 200) {
+	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("Failed getting k8s pv info for pv %s - %s", persistentVolumeName, respPv)
 	}
 
-	return &respPv, nil;
+	return &respPv, nil
 }
 
 func (c *Client) GetReplicationControllerInfo(rcName string) (*v1.ReplicationController, error) {
@@ -321,7 +319,7 @@ func (c *Client) GetReplicationControllerInfo(rcName string) (*v1.ReplicationCon
 func (c *Client) getEntityInfo(entityTypeName string, entityName string, entityStructPtr interface{}) error {
 	httpMethod := "GET"
 	resourceName := entityTypeName
-	if (entityName != "") {
+	if entityName != "" {
 		resourceName += "/" + entityName
 	}
 
@@ -332,13 +330,13 @@ func (c *Client) getEntityInfo(entityTypeName string, entityName string, entityS
 	} else {
 		resp, err = c.doHttpNoNS(httpMethod, resourceName, nil)
 	}
-	if (err != nil) {
+	if err != nil {
 		return fmt.Errorf("Failed getting k8s info for entity %s - %s", resourceName, err.Error())
 	}
 
 	defer resp.Body.Close()
 
-	if (resp.StatusCode != http.StatusOK) {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Failed getting k8s %s with code %s", resourceName, resp.Status)
 	}
 
@@ -347,12 +345,12 @@ func (c *Client) getEntityInfo(entityTypeName string, entityName string, entityS
 
 	//todo: only do on debug - is there a go shit to do that? if debug?
 	_, err = json.MarshalIndent(entityStructPtr, "", "    ")
-	if (err != nil) {
+	if err != nil {
 		log.Printf("Failed parsing json for response of entity %s - %s\n", resourceName, err.Error())
 	} else {
 		//log.Printf("%s on %s returned\n%s\n", httpMethod, resourceName, string(str))
 	}
-	return nil;
+	return nil
 
 }
 func (c *Client) GetPodInfo(podName string) (*v1.Pod, error) {
@@ -366,16 +364,16 @@ func (c *Client) GetPodLogs(podName string) ([]byte, error) {
 	resourceName := "pods/" + podName + "/log?pretty=trye"
 
 	resp, err := c.doHttp(httpMethod, resourceName, nil)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed getting k8s %s info for service %s - %s", resourceName, podName, err.Error())
 	}
 	defer resp.Body.Close()
 	content, err := ioutil.ReadAll(resp.Body)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed reeading response %s - %s: ", resourceName, err.Error())
 	}
 
-	return content, nil;
+	return content, nil
 }
 
 type LogMessageConsumer interface {
@@ -388,7 +386,7 @@ func (c *Client) FollowPodLogs(podName string, consumerChannel chan string) (Clo
 	httpMethod := "GET"
 	resourceName := "pods/" + podName + "/log?follow=trye"
 	resp, err := c.doHttp(httpMethod, resourceName, nil)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed following k8s logs for pod %s - %s", podName, err.Error())
 	} else if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Failed following k8s logs for pod %s with status %s", podName, resp.Status)
@@ -399,9 +397,9 @@ func (c *Client) FollowPodLogs(podName string, consumerChannel chan string) (Clo
 	go func() {
 		for {
 			line, err := reader.ReadBytes('\n')
-			if (err != nil) {
+			if err != nil {
 				log.Printf("Error reading log for pod %s - %s", podName, err.Error())
-				return;
+				return
 			} else {
 				select {
 				case consumerChannel <- (string(line)):
@@ -424,66 +422,66 @@ func (c *Client) DeletePod(podName string) (*v1.Pod, error) {
 	httpMethod := "DELETE"
 	resourceName := "pods/" + podName
 	resp, err := c.doHttp(httpMethod, resourceName, nil)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed deleting k8s %s for %s - %s", resourceName, podName, err.Error())
 	}
-	if (resp.StatusCode != http.StatusOK) {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Failed deleting k8s %s for %s - %s", resourceName, podName, resp.Status)
 	}
 
 	defer resp.Body.Close()
-	var respPod v1.Pod;
+	var respPod v1.Pod
 	dec := json.NewDecoder(resp.Body)
 	dec.Decode(&respPod)
 
 	//todo: only do on debug - is there a go shit to do that? if debug?
 	str, err := json.MarshalIndent(respPod, "", "    ")
-	if (err != nil) {
+	if err != nil {
 		log.Println(err)
 	}
 	log.Printf("\n%s on %s returned\n\n%s\n\n", httpMethod, resourceName, string(str))
 
-	return &respPod, nil;
+	return &respPod, nil
 }
 
 func (c *Client) CheckNamespaceExist(nsName string) (bool, error) {
-	r, err := c.doHttpNoNS("GET", "namespaces/" + nsName, nil)
-	if (err != nil) {
-		return false, err;
+	r, err := c.doHttpNoNS("GET", "namespaces/"+nsName, nil)
+	if err != nil {
+		return false, err
 	}
 	defer r.Body.Close()
-	if (r.StatusCode == 200) {
+	if r.StatusCode == 200 {
 		return true, nil
 	} else {
-		return false, nil;
+		return false, nil
 	}
 }
 func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries int, sleepDuration time.Duration) error {
 	exist, err := c.CheckNamespaceExist(nsName)
-	if (err != nil) {
+	if err != nil {
 		return err
 	}
-	if (!exist) {
+	if !exist {
 		log.Printf("Could not find namespace %s when trying to delete.. whatever...\n", nsName)
-		return nil;
+		return nil
 	}
 	err = c.DeleteNamespace(nsName)
-	if (err != nil) {
+	if err != nil {
 		return err
 	}
-	nsStillTerminating := true;
+	nsStillTerminating := true
 
 	for retries := maxRetries; nsStillTerminating && retries > 0; retries-- {
 		time.Sleep(sleepDuration)
-		log.Printf("Waiting for namespace %s to vanish, %d/%d\n", nsName, maxRetries - retries, maxRetries)
+		log.Printf("Waiting for namespace %s to vanish, %d/%d\n", nsName, maxRetries-retries, maxRetries)
 		nsStillTerminating, err = c.CheckNamespaceExist(nsName)
-		if (err != nil) {
+		if err != nil {
 			return err
 		}
 	}
 
 	// If service did not start by now, fail the deployment
-	if (nsStillTerminating) {
+	if nsStillTerminating {
 		return fmt.Errorf("Bloody namespace %s failed to die even after %d freaking retries", nsName, maxRetries)
 	}
 
@@ -491,34 +489,34 @@ func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries 
 }
 
 func (c *Client) DeleteNamespace(nsName string) error {
-	return c.deleteEntity("namespaces/" + nsName);
+	return c.deleteEntity("namespaces/" + nsName)
 }
 
-func (c *Client) DeleteReplicationController(rcName string) (error) {
+func (c *Client) DeleteReplicationController(rcName string) error {
 	return c.deleteEntity("replicationcontrollers/" + rcName)
 }
-func (c *Client) DeleteService(serviceName string) (error) {
+func (c *Client) DeleteService(serviceName string) error {
 	return c.deleteEntity("services/" + serviceName)
 }
 
-func (c *Client) deleteEntity(relativeUrl string) (error) {
+func (c *Client) deleteEntity(relativeUrl string) error {
 	httpMethod := "DELETE"
 	resp, err := c.doHttpNoNS(httpMethod, relativeUrl, nil)
-	if (err != nil) {
+	if err != nil {
 		return fmt.Errorf("Failed deleting %s - %s", relativeUrl, err.Error())
 	}
 
-	if (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict) {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("Failed deleting %s received status %s", relativeUrl, resp.Status)
 	}
 	defer resp.Body.Close()
 
 	// Printing output
 	btt, err := ioutil.ReadAll(resp.Body)
-	if (err == nil) {
+	if err == nil {
 		buf := new(bytes.Buffer)
 		err = json.Indent(buf, btt, "", "  ")
-		if (err == nil) {
+		if err == nil {
 
 			// todo: log level!
 			//log.Printf("delete on %s returned:\n%s", relativeUrl, buf)
@@ -529,19 +527,19 @@ func (c *Client) deleteEntity(relativeUrl string) (error) {
 }
 
 func (c *Client) doHttp(method string, resource string, r io.Reader) (*http.Response, error) {
-	return c.doHttpNoNS(method, "namespaces/" + c.Namespace + "/" + resource, r)
+	return c.doHttpNoNS(method, "namespaces/"+c.Namespace+"/"+resource, r)
 }
 
 func (c *Client) doHttpNoNS(method string, resource string, r io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, c.Url + "/api/v1/" + resource, r)
+	req, err := http.NewRequest(method, c.Url+"/api/v1/"+resource, r)
 	if err != nil {
 		return nil, fmt.Errorf("failed %s request on %s - %s", method, resource, err.Error())
 	}
 
 	// Setting authentication
-	if (len(c.SslToken) > 0) {
+	if len(c.SslToken) > 0 {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.SslToken))
-	} else if (len(c.UserName) > 0) {
+	} else if len(c.UserName) > 0 {
 		req.SetBasicAuth(c.UserName, c.Password)
 	}
 
@@ -563,26 +561,26 @@ func (c *Client) RunOneOffTask(name string, containerName string, additionalVars
 	// Building rc spec
 
 	pod := &v1.Pod{}
-	pod.ObjectMeta = v1.ObjectMeta{Name:name}
+	pod.ObjectMeta = v1.ObjectMeta{Name: name}
 	pod.ObjectMeta.Labels = make(map[string]string)
 	pod.Labels["app"] = "bootstrap"
 	pod.ObjectMeta.Labels["nazKind"] = "sys"
 
 	containerSpec := v1.Container{}
 	containerSpec.Name = "bootstrap"
-	containerSpec.Image = containerName;
+	containerSpec.Image = containerName
 	containerSpec.ImagePullPolicy = v1.PullIfNotPresent
-	containerSpec.Ports = []v1.ContainerPort{{ContainerPort:8000}}
-	containerSpec.Env = additionalVars;
+	containerSpec.Ports = []v1.ContainerPort{{ContainerPort: 8000}}
+	containerSpec.Env = additionalVars
 	containers := []v1.Container{containerSpec}
 
-	pod.Spec = v1.PodSpec{RestartPolicy:v1.RestartPolicyNever}
+	pod.Spec = v1.PodSpec{RestartPolicy: v1.RestartPolicyNever}
 	pod.Spec.Containers = containers
 
 	// The pod
 	createdPod, err := c.CreatePod(pod, false)
 	if err != nil {
-		return fmt.Errorf("Failed creating task pod %s - %s", name, err.Error());
+		return fmt.Errorf("Failed creating task pod %s - %s", name, err.Error())
 	}
 
 	// Deleting this pod so it won't stay there forever
@@ -592,31 +590,30 @@ func (c *Client) RunOneOffTask(name string, containerName string, additionalVars
 
 	for retries := 60; createdPod.Status.Phase != v1.PodSucceeded &&
 		createdPod.Status.Phase != v1.PodFailed &&
-		retries > 0;
-	retries-- {
+		retries > 0; retries-- {
 		log.Printf("Waiting task to execute... %d", retries)
 		time.Sleep(3 * time.Second)
 		createdPod, err = c.GetPodInfo(createdPod.Name)
 		if err != nil {
-			return fmt.Errorf("Failed getting task pod %s info - %s", name, err.Error());
+			return fmt.Errorf("Failed getting task pod %s info - %s", name, err.Error())
 		}
 	}
 
 	//todo:tail logs in a go routine as we go...
 	podLog, err := c.GetPodLogs(createdPod.Name)
-	if (err != nil) {
+	if err != nil {
 		log.Printf("Failed retreiving task pod %s logs, %s", createdPod.Name, err.Error())
 	}
 	fmt.Printf("Task Pod Logs\n%s", string(podLog))
 
 	if createdPod.Status.Phase != v1.PodSucceeded &&
 		createdPod.Status.Phase != v1.PodFailed {
-		return fmt.Errorf("task pod %s failed to finish in a timely fashion", name);
+		return fmt.Errorf("task pod %s failed to finish in a timely fashion", name)
 	} else if createdPod.Status.Phase != v1.PodSucceeded {
-		return fmt.Errorf("task pod %s has miserably failed", name);
+		return fmt.Errorf("task pod %s has miserably failed", name)
 	}
 
-	return err;
+	return err
 }
 
 func (c *Client) CreatePod(pod *v1.Pod, force bool) (*v1.Pod, error) {
@@ -625,12 +622,12 @@ func (c *Client) CreatePod(pod *v1.Pod, force bool) (*v1.Pod, error) {
 	return respPod, err
 }
 
-func (c*Client) TestVolume(volumeName string) (bool, *v1.PersistentVolume, error) {
+func (c *Client) TestVolume(volumeName string) (bool, *v1.PersistentVolume, error) {
 	var pv *v1.PersistentVolume
 	var err error
 	pv, err = c.GetPersistentVolumeInfo(volumeName)
-	if (err != nil) {
-		return false, nil, fmt.Errorf("Failed getting k8s pv for %s - %s", volumeName, err.Error());
+	if err != nil {
+		return false, nil, fmt.Errorf("Failed getting k8s pv for %s - %s", volumeName, err.Error())
 	}
 
 	switch pv.Status.Phase {
@@ -641,63 +638,61 @@ func (c*Client) TestVolume(volumeName string) (bool, *v1.PersistentVolume, error
 	case v1.VolumeBound:
 		return true, pv, nil
 	case v1.VolumeReleased:
-		return false, pv, fmt.Errorf("volume %s is released - %s", volumeName, pv.Status.Message);
+		return false, pv, fmt.Errorf("volume %s is released - %s", volumeName, pv.Status.Message)
 	case v1.VolumeFailed:
-		return false, pv, fmt.Errorf("volume %s is failed - %s", volumeName, pv.Status.Message);
+		return false, pv, fmt.Errorf("volume %s is failed - %s", volumeName, pv.Status.Message)
 	default:
-		return false, pv, fmt.Errorf("volume %s is %s - %s", volumeName, pv.Status.Phase, pv.Status.Message);
+		return false, pv, fmt.Errorf("volume %s is %s - %s", volumeName, pv.Status.Phase, pv.Status.Message)
 	}
 }
 
-func (c*Client) TestService(serviceName string) (bool, *v1.Service, error) {
+func (c *Client) TestService(serviceName string) (bool, *v1.Service, error) {
 	var svc *v1.Service
 	var err error
 	svc, err = c.GetServiceInfo(serviceName)
-	if (err != nil) {
-		return false, nil, fmt.Errorf("Failed getting k8s service for %s - %s", serviceName, err.Error());
+	if err != nil {
+		return false, nil, fmt.Errorf("Failed getting k8s service for %s - %s", serviceName, err.Error())
 	}
 
-	if (svc.Spec.Type == v1.ServiceTypeLoadBalancer) {
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
 		return len(svc.Status.LoadBalancer.Ingress) > 0 &&
-			len(svc.Status.LoadBalancer.Ingress[0].Hostname) > 0,
+				len(svc.Status.LoadBalancer.Ingress[0].Hostname) > 0,
 			svc, nil
-	} else if (svc.Spec.Type == v1.ServiceTypeNodePort) {
+	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
 		return len(svc.Spec.Ports) > 0 &&
-			svc.Spec.Ports[0].NodePort > 0,
+				svc.Spec.Ports[0].NodePort > 0,
 			svc, nil
-	} else if (svc.Spec.Type == v1.ServiceTypeClusterIP) {
+	} else if svc.Spec.Type == v1.ServiceTypeClusterIP {
 		// todo, find how..
 		time.Sleep(5 * time.Second)
 		return true, svc, nil
 	} else {
-		return false, svc, fmt.Errorf("Unsupported k8s service type %s for service %s", svc.Spec.Type, serviceName);
+		return false, svc, fmt.Errorf("Unsupported k8s service type %s for service %s", svc.Spec.Type, serviceName)
 	}
 
 }
-func (c*Client) WaitForServiceToStart(serviceName string, maxRetries int, sleepDuration time.Duration) (*v1.Service, error) {
-	serviceReady := false;
+func (c *Client) WaitForServiceToStart(serviceName string, maxRetries int, sleepDuration time.Duration) (*v1.Service, error) {
+	serviceReady := false
 
 	var svc *v1.Service
 	var err error
 	for retries := maxRetries; !serviceReady && retries > 0; retries-- {
-		if (retries != maxRetries) {
+		if retries != maxRetries {
 			time.Sleep(sleepDuration)
 		}
 
-		log.Printf("Waiting for service %s to start serving, %d/%d\n", serviceName, maxRetries - retries, maxRetries)
+		log.Printf("Waiting for service %s to start serving, %d/%d\n", serviceName, maxRetries-retries, maxRetries)
 		serviceReady, svc, err = c.TestService(serviceName)
-		if (err != nil) {
-			return nil, fmt.Errorf("Failed getting k8s service for %s - %s", serviceName, err.Error());
+		if err != nil {
+			return nil, fmt.Errorf("Failed getting k8s service for %s - %s", serviceName, err.Error())
 		}
 	}
 
 	// If service did not start by now, fail the deployment
-	if (!serviceReady) {
+	if !serviceReady {
 		return svc, fmt.Errorf("Bloody service %s failed to start after %d retries", serviceName, maxRetries)
 	}
 
 	return svc, nil
 
 }
-
-

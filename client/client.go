@@ -12,7 +12,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -36,11 +35,9 @@ func NewClient(url string, namespace string, userName string, password string, c
 	//todo:nasty nasty insecure connect to cluster, fix one day when this becomes a real thing - Ash Nazg
 	log.Println(url)
 
-	var caCertPool *x509.CertPool = nil
-	log.Println("here1")
+	var caCertPool *x509.CertPool
 	sslToken := ""
 	if certificatePath != "" {
-		log.Println("here2")
 
 		caCert, err := ioutil.ReadFile(certificatePath)
 		sslToken = string(caCert)
@@ -67,11 +64,10 @@ func NewClient(url string, namespace string, userName string, password string, c
 	}
 
 	defer r.Body.Close()
-	if r.StatusCode == 200 {
+	if r.StatusCode == http.StatusOK {
 		return c, nil
-	} else {
-		return nil, errors.New(fmt.Sprintf("Failed testing k8s connection, received status %s", r.Status))
 	}
+	return nil, fmt.Errorf("Failed testing k8s connection, received status %s", r.Status)
 }
 
 func (c *Client) CreateNamespace(ns *v1.Namespace, force bool) (*v1.Namespace, error) {
@@ -103,12 +99,12 @@ func (c *Client) CheckServiceExists(serviceName string) (bool, error) {
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		return false, nil
-	} else if resp.StatusCode == http.StatusOK {
-		return true, nil
-	} else {
-		log.Printf("Unexpected response status when checking service %s - %s", serviceName, resp.Status)
-		return false, fmt.Errorf("Unexpected response status when checking service %s - %s", serviceName, resp.Status)
 	}
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	log.Printf("Unexpected response status when checking service %s - %s", serviceName, resp.Status)
+	return false, fmt.Errorf("Unexpected response status when checking service %s - %s", serviceName, resp.Status)
 }
 
 func isEntityTypeNamespaceLevel(entityTypeName string) bool {
@@ -303,7 +299,7 @@ func (c *Client) GetPersistentVolumeInfo(persistentVolumeName string) (*v1.Persi
 	}
 	log.Println(string(str))
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Failed getting k8s pv info for pv %s - %s", persistentVolumeName, respPv)
 	}
 
@@ -400,13 +396,11 @@ func (c *Client) FollowPodLogs(podName string, consumerChannel chan string) (Clo
 			if err != nil {
 				log.Printf("Error reading log for pod %s - %s", podName, err.Error())
 				return
-			} else {
-				select {
-				case consumerChannel <- (string(line)):
-				case _ = <-closeChannel:
-					log.Printf("stopped following pod %s logs\n", podName)
-				}
-
+			}
+			select {
+			case consumerChannel <- (string(line)):
+			case _ = <-closeChannel:
+				log.Printf("stopped following pod %s logs\n", podName)
 			}
 		}
 	}()
@@ -450,12 +444,9 @@ func (c *Client) CheckNamespaceExist(nsName string) (bool, error) {
 		return false, err
 	}
 	defer r.Body.Close()
-	if r.StatusCode == 200 {
-		return true, nil
-	} else {
-		return false, nil
-	}
+	return r.StatusCode == http.StatusOK, nil
 }
+
 func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries int, sleepDuration time.Duration) error {
 	exist, err := c.CheckNamespaceExist(nsName)
 	if err != nil {
@@ -658,18 +649,18 @@ func (c *Client) TestService(serviceName string) (bool, *v1.Service, error) {
 		return len(svc.Status.LoadBalancer.Ingress) > 0 &&
 				len(svc.Status.LoadBalancer.Ingress[0].Hostname) > 0,
 			svc, nil
-	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
+	}
+	if svc.Spec.Type == v1.ServiceTypeNodePort {
 		return len(svc.Spec.Ports) > 0 &&
 				svc.Spec.Ports[0].NodePort > 0,
 			svc, nil
-	} else if svc.Spec.Type == v1.ServiceTypeClusterIP {
+	}
+	if svc.Spec.Type == v1.ServiceTypeClusterIP {
 		// todo, find how..
 		time.Sleep(5 * time.Second)
 		return true, svc, nil
-	} else {
-		return false, svc, fmt.Errorf("Unsupported k8s service type %s for service %s", svc.Spec.Type, serviceName)
 	}
-
+	return false, svc, fmt.Errorf("Unsupported k8s service type %s for service %s", svc.Spec.Type, serviceName)
 }
 func (c *Client) WaitForServiceToStart(serviceName string, maxRetries int, sleepDuration time.Duration) (*v1.Service, error) {
 	serviceReady := false

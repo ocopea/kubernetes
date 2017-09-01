@@ -384,7 +384,8 @@ func (c *Client) FollowPodLogs(podName string, consumerChannel chan string) (Clo
 	resp, err := c.doHttp(httpMethod, resourceName, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed following k8s logs for pod %s - %s", podName, err.Error())
-	} else if resp.StatusCode != http.StatusOK {
+	}
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Failed following k8s logs for pod %s with status %s", podName, resp.Status)
 	}
 	closeChannel := make(chan bool, 1)
@@ -432,6 +433,7 @@ func (c *Client) DeletePod(podName string) (*v1.Pod, error) {
 	str, err := json.MarshalIndent(respPod, "", "    ")
 	if err != nil {
 		log.Println(err)
+		// FIXME - no early return? not returning error?
 	}
 	log.Printf("\n%s on %s returned\n\n%s\n\n", httpMethod, resourceName, string(str))
 
@@ -447,7 +449,7 @@ func (c *Client) CheckNamespaceExist(nsName string) (bool, error) {
 	return r.StatusCode == http.StatusOK, nil
 }
 
-func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries int, sleepDuration time.Duration) error {
+func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries int, retryDelay time.Duration) error {
 	exist, err := c.CheckNamespaceExist(nsName)
 	if err != nil {
 		return err
@@ -460,23 +462,21 @@ func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries 
 	if err != nil {
 		return err
 	}
-	nsStillTerminating := true
 
-	for retries := maxRetries; nsStillTerminating && retries > 0; retries-- {
-		time.Sleep(sleepDuration)
+	for retries := maxRetries; retries > 0; retries-- {
+		time.Sleep(retryDelay) // FIXME - do we have to wait first or can we just check and wait after that
 		log.Printf("Waiting for namespace %s to vanish, %d/%d\n", nsName, maxRetries-retries, maxRetries)
-		nsStillTerminating, err = c.CheckNamespaceExist(nsName)
+		nsStillTerminating, err := c.CheckNamespaceExist(nsName)
 		if err != nil {
 			return err
 		}
+		if !nsStillTerminating {
+			return nil
+		}
 	}
 
-	// If service did not start by now, fail the deployment
-	if nsStillTerminating {
-		return fmt.Errorf("Bloody namespace %s failed to die even after %d freaking retries", nsName, maxRetries)
-	}
-
-	return nil
+	// the service wasn't deleted even after max retries
+	return fmt.Errorf("Bloody namespace %s failed to die even after %d freaking retries", nsName, maxRetries)
 }
 
 func (c *Client) DeleteNamespace(nsName string) error {
@@ -553,19 +553,19 @@ func (c *Client) RunOneOffTask(name string, containerName string, additionalVars
 
 	pod := &v1.Pod{}
 	pod.ObjectMeta = v1.ObjectMeta{Name: name}
-	pod.ObjectMeta.Labels = make(map[string]string)
+	pod.ObjectMeta.Labels = map[string]string{"nazKind": "sys"}
 	pod.Labels["app"] = "bootstrap"
-	pod.ObjectMeta.Labels["nazKind"] = "sys"
+	pod.Spec = v1.PodSpec{RestartPolicy: v1.RestartPolicyNever}
 
-	containerSpec := v1.Container{}
-	containerSpec.Name = "bootstrap"
-	containerSpec.Image = containerName
-	containerSpec.ImagePullPolicy = v1.PullIfNotPresent
-	containerSpec.Ports = []v1.ContainerPort{{ContainerPort: 8000}}
-	containerSpec.Env = additionalVars
+	containerSpec := v1.Container{
+		Name:            "boostrap",
+		Image:           containerName,
+		ImagePullPolicy: v1.PullIfNotPresent,
+		Ports:           []v1.ContainerPort{{ContainerPort: 8000}},
+		Env:             additionalVars,
+	}
 	containers := []v1.Container{containerSpec}
 
-	pod.Spec = v1.PodSpec{RestartPolicy: v1.RestartPolicyNever}
 	pod.Spec.Containers = containers
 
 	// The pod
@@ -591,20 +591,24 @@ func (c *Client) RunOneOffTask(name string, containerName string, additionalVars
 	}
 
 	//todo:tail logs in a go routine as we go...
+	// FIXME: should we do this even if we reached here because we exceeded max retries?
 	podLog, err := c.GetPodLogs(createdPod.Name)
 	if err != nil {
 		log.Printf("Failed retreiving task pod %s logs, %s", createdPod.Name, err.Error())
 	}
 	fmt.Printf("Task Pod Logs\n%s", string(podLog))
 
+	// FIXME: See previous fixme; should we do this before we try to get logs?
 	if createdPod.Status.Phase != v1.PodSucceeded &&
 		createdPod.Status.Phase != v1.PodFailed {
 		return fmt.Errorf("task pod %s failed to finish in a timely fashion", name)
-	} else if createdPod.Status.Phase != v1.PodSucceeded {
+	}
+
+	if createdPod.Status.Phase != v1.PodSucceeded {
 		return fmt.Errorf("task pod %s has miserably failed", name)
 	}
 
-	return err
+	return nil
 }
 
 func (c *Client) CreatePod(pod *v1.Pod, force bool) (*v1.Pod, error) {
@@ -614,9 +618,7 @@ func (c *Client) CreatePod(pod *v1.Pod, force bool) (*v1.Pod, error) {
 }
 
 func (c *Client) TestVolume(volumeName string) (bool, *v1.PersistentVolume, error) {
-	var pv *v1.PersistentVolume
-	var err error
-	pv, err = c.GetPersistentVolumeInfo(volumeName)
+	pv, err := c.GetPersistentVolumeInfo(volumeName)
 	if err != nil {
 		return false, nil, fmt.Errorf("Failed getting k8s pv for %s - %s", volumeName, err.Error())
 	}
@@ -638,9 +640,7 @@ func (c *Client) TestVolume(volumeName string) (bool, *v1.PersistentVolume, erro
 }
 
 func (c *Client) TestService(serviceName string) (bool, *v1.Service, error) {
-	var svc *v1.Service
-	var err error
-	svc, err = c.GetServiceInfo(serviceName)
+	svc, err := c.GetServiceInfo(serviceName)
 	if err != nil {
 		return false, nil, fmt.Errorf("Failed getting k8s service for %s - %s", serviceName, err.Error())
 	}
@@ -662,28 +662,20 @@ func (c *Client) TestService(serviceName string) (bool, *v1.Service, error) {
 	}
 	return false, svc, fmt.Errorf("Unsupported k8s service type %s for service %s", svc.Spec.Type, serviceName)
 }
-func (c *Client) WaitForServiceToStart(serviceName string, maxRetries int, sleepDuration time.Duration) (*v1.Service, error) {
-	serviceReady := false
 
-	var svc *v1.Service
-	var err error
-	for retries := maxRetries; !serviceReady && retries > 0; retries-- {
-		if retries != maxRetries {
-			time.Sleep(sleepDuration)
-		}
-
+func (c *Client) WaitForServiceToStart(serviceName string, maxRetries int, retryDelay time.Duration) (*v1.Service, error) {
+	for retries := maxRetries; retries > 0; retries-- {
 		log.Printf("Waiting for service %s to start serving, %d/%d\n", serviceName, maxRetries-retries, maxRetries)
-		serviceReady, svc, err = c.TestService(serviceName)
+		ready, svc, err := c.TestService(serviceName)
 		if err != nil {
 			return nil, fmt.Errorf("Failed getting k8s service for %s - %s", serviceName, err.Error())
 		}
+		if ready {
+			return svc, nil
+		}
+		time.Sleep(retryDelay)
 	}
 
 	// If service did not start by now, fail the deployment
-	if !serviceReady {
-		return svc, fmt.Errorf("Bloody service %s failed to start after %d retries", serviceName, maxRetries)
-	}
-
-	return svc, nil
-
+	return nil, fmt.Errorf("Bloody service %s failed to start after %d retries", serviceName, maxRetries)
 }

@@ -20,6 +20,7 @@ import (
 	"time"
 	"crypto/x509"
 	"bufio"
+	"ocopea/kubernetes/client/types"
 )
 
 type Client struct {
@@ -199,13 +200,31 @@ func (c *Client) ListPodsInfo(labelFilters map[string]string) ([]*v1.Pod, error)
 	podList := make([]*v1.Pod, 0)
 	if (respPodList.Items != nil) {
 		for i := range respPodList.Items {
-//			if (doesObjectHaveAllLabels(&respPodList.Items[i].ObjectMeta, labelFilters)) {
-				podList = append(podList, &respPodList.Items[i])
-//			}
+			podList = append(podList, &respPodList.Items[i])
 		}
 	}
 	return podList, nil;
 }
+
+func (c *Client) ListEntityEvents(entityUid types.UID) ([]*v1.Event, error) {
+
+	respEventList := &v1.EventList{}
+	err := c.getEntityInfo(fmt.Sprintf("events?fieldSelector=involvedObject.uid=%s", entityUid), "", respEventList)
+
+	// Listing all events for entity uid
+	if (err != nil) {
+		return nil, err
+	}
+
+	eventList := make([]*v1.Event, 0)
+	if (respEventList.Items != nil) {
+		for i := range respEventList.Items {
+			eventList = append(eventList, &respEventList.Items[i])
+		}
+	}
+	return eventList, nil;
+}
+
 
 func buildLabelsQueryString(labelFilters map[string]string) string {
 	queryString := ""
@@ -346,11 +365,11 @@ func (c *Client) getEntityInfo(entityTypeName string, entityName string, entityS
 	dec.Decode(entityStructPtr)
 
 	//todo: only do on debug - is there a go shit to do that? if debug?
-	_, err = json.MarshalIndent(entityStructPtr, "", "    ")
+	str, err := json.MarshalIndent(entityStructPtr, "", "    ")
 	if (err != nil) {
 		log.Printf("Failed parsing json for response of entity %s - %s\n", resourceName, err.Error())
 	} else {
-		//log.Printf("%s on %s returned\n%s\n", httpMethod, resourceName, string(str))
+		log.Printf("%s on %s returned\n%s\n", httpMethod, resourceName, string(str))
 	}
 	return nil;
 

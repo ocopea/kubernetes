@@ -451,7 +451,6 @@ func (c *Client) DeletePod(podName string) (*v1.Pod, error) {
 	str, err := json.MarshalIndent(respPod, "", "    ")
 	if err != nil {
 		log.Println(err)
-		// FIXME - no early return? not returning error?
 	}
 	log.Printf("\n%s on %s returned\n\n%s\n\n", httpMethod, resourceName, string(str))
 
@@ -482,7 +481,7 @@ func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries 
 	}
 
 	for retries := maxRetries; retries > 0; retries-- {
-		time.Sleep(retryDelay) // FIXME - do we have to wait first or can we just check and wait after that
+		time.Sleep(retryDelay) // deleting namespace takes time so let's start by waiting
 		log.Printf("Waiting for namespace %s to vanish, %d/%d\n", nsName, maxRetries-retries, maxRetries)
 		nsStillTerminating, err := c.CheckNamespaceExist(nsName)
 		if err != nil {
@@ -609,7 +608,6 @@ func (c *Client) RunOneOffTask(name string, containerName string, additionalVars
 	}
 
 	//todo:tail logs in a go routine as we go...
-	// FIXME: should we do this even if we reached here because we exceeded max retries?
 	podLog, err := c.GetPodLogs(createdPod.Name)
 	if err != nil {
 		log.Printf("Failed retreiving task pod %s logs, %s", createdPod.Name, err.Error())

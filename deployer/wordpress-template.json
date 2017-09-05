@@ -8,7 +8,7 @@
       "appServiceName":"wordpress",
       "psbType":"k8s",
       "imageName":"wordpress",
-      "imageType":"nodejs",
+      "imageType":"apache-webserver",
       "imageVersion":"4.7.3-apache",
       "psbSettings":{
 

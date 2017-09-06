@@ -177,7 +177,7 @@ func deploySite(ctx *cmd.DeployerContext) (error) {
 	var serviceUrl string;
 	if (svc.Spec.Type == v1.ServiceTypeLoadBalancer) {
 		serviceUrl =
-			"http://" + svc.Status.LoadBalancer.Ingress[0].Hostname + ":80"
+			"http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":80"
 	} else if (svc.Spec.Type == v1.ServiceTypeNodePort) {
 		serviceUrl = "http://" + ctx.ClusterIp + ":" +
 			strconv.Itoa(svc.Spec.Ports[0].NodePort)
@@ -229,7 +229,7 @@ func deploySite(ctx *cmd.DeployerContext) (error) {
 	if (svc.Spec.Type == v1.ServiceTypeLoadBalancer) {
 		for _, currPort := range svc.Spec.Ports {
 			if (currPort.Name == "service-http") {
-				publicRoute = "http://" + svc.Status.LoadBalancer.Ingress[0].Hostname + ":" +
+				publicRoute = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":" +
 					strconv.Itoa(currPort.Port)
 			} else {
 				if (additionalPortsJSON == "") {
@@ -292,7 +292,7 @@ func deploySite(ctx *cmd.DeployerContext) (error) {
 	var rootUrl string;
 	if (svc.Spec.Type == v1.ServiceTypeLoadBalancer) {
 		//todo:2: read correct port from service
-		rootUrl = "http://" + svc.Status.LoadBalancer.Ingress[0].Hostname
+		rootUrl = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer)
 	} else if (svc.Spec.Type == v1.ServiceTypeNodePort) {
 		rootUrl = "http://" + ctx.ClusterIp + ":" + strconv.Itoa(svc.Spec.Ports[0].NodePort)
 	} else {
@@ -451,7 +451,7 @@ func getOrcsServiceUrl(ctx *cmd.DeployerContext) (error, string) {
 	var serviceUrl string;
 	if (orcsService.Spec.Type == v1.ServiceTypeLoadBalancer) {
 		serviceUrl =
-			"http://" + orcsService.Status.LoadBalancer.Ingress[0].Hostname + ":80"
+			"http://" + extractLoadBalancerAddress(orcsService.Status.LoadBalancer) + ":80"
 	} else if (orcsService.Spec.Type == v1.ServiceTypeNodePort) {
 		serviceUrl = "http://" + ctx.ClusterIp + ":" +
 			strconv.Itoa(orcsService.Spec.Ports[0].NodePort)
@@ -1152,7 +1152,7 @@ clusterIp string) (*v1.Service, error) {
 	if (svc.Spec.Type == v1.ServiceTypeLoadBalancer) {
 		for _, currPort := range svc.Spec.Ports {
 			if (currPort.Name == "service-http") {
-				publicRoute = "http://" + svc.Status.LoadBalancer.Ingress[0].Hostname + ":" + strconv.Itoa(currPort.Port)
+				publicRoute = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":" + strconv.Itoa(currPort.Port)
 			} else {
 				if (additionalPortsJSON == "") {
 					additionalPortsJSON = "{"
@@ -1266,7 +1266,7 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 	var err error = nil
 	var numberOfEventsEncountered int = 0
 	// now we want to see that the stupid pod is really starting!
-	for retries := 600; pod.Status.Phase != "Running" && retries > 0; retries-- {
+	for retries := 900; pod.Status.Phase != "Running" && retries > 0; retries-- {
 		pod, err = client.GetPodInfo(pod.Name)
 		if (err != nil) {
 			return fmt.Errorf("Failed getting pod %s while waiting for it to be a sweetheart and run - %s", pod.Name, err.Error());
@@ -1333,7 +1333,7 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 					)
 			}
 		}
-		return fmt.Errorf("Pod %s did not start after 10 freakin' minutes and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
+		return fmt.Errorf("Pod %s did not start after 15 freakin' minutes and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
 	}
 }
 
@@ -1550,4 +1550,14 @@ func verifyOrcsServiceHasStarted(ctx *cmd.DeployerContext, serviceEndpoint strin
 		return fmt.Errorf("site is not running but %s", state)
 	}
 	return nil
+}
+
+func extractLoadBalancerAddress(loadBalancerStatus v1.LoadBalancerStatus) string {
+	if (len(loadBalancerStatus.Ingress[0].IP) > 0) {
+		return loadBalancerStatus.Ingress[0].IP
+	}
+	if (len(loadBalancerStatus.Ingress[0].Hostname) > 0) {
+		return loadBalancerStatus.Ingress[0].Hostname
+	}
+	return ""
 }

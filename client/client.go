@@ -225,7 +225,6 @@ func (c *Client) ListEntityEvents(entityUid types.UID) ([]*v1.Event, error) {
 	return eventList, nil;
 }
 
-
 func buildLabelsQueryString(labelFilters map[string]string) string {
 	queryString := ""
 	if (labelFilters != nil) {
@@ -677,9 +676,10 @@ func (c*Client) TestService(serviceName string) (bool, *v1.Service, error) {
 	}
 
 	if (svc.Spec.Type == v1.ServiceTypeLoadBalancer) {
-		return len(svc.Status.LoadBalancer.Ingress) > 0 &&
-			len(svc.Status.LoadBalancer.Ingress[0].Hostname) > 0,
-			svc, nil
+		return len(svc.Status.LoadBalancer.Ingress) > 0 && (
+				len(svc.Status.LoadBalancer.Ingress[0].IP) > 0 ||
+					len(svc.Status.LoadBalancer.Ingress[0].Hostname) > 0),
+		svc, nil
 	} else if (svc.Spec.Type == v1.ServiceTypeNodePort) {
 		return len(svc.Spec.Ports) > 0 &&
 			svc.Spec.Ports[0].NodePort > 0,

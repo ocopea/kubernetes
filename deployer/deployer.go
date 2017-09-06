@@ -675,7 +675,7 @@ func buildSiteServiceConfiguration(rootConfig *configuration.StaticConfiguration
 }
 
 func deployK8sPsbOrcs(ctx *cmd.DeployerContext) (error) {
-	fmt.Println("Deploying cf-psb")
+	fmt.Println("Deploying k8s-psb")
 	// Verifying site is registered
 	err, siteId := getSiteIdOrcs(ctx, "site")
 	if (err != nil) {
@@ -913,7 +913,7 @@ expectedStatusCode int) error {
 
 	// Posting the command
 	urlToPost := orcsServiceUrl + "/" + svcUrn + "-api/commands/" + commandName
-	log.Printf("Posting to %s", urlToPost)
+	log.Printf("Posting to %s\n", urlToPost)
 	req, err := http.NewRequest(
 		"POST",
 		urlToPost,
@@ -932,7 +932,7 @@ expectedStatusCode int) error {
 
 	jb, err := json.MarshalIndent(jsonBody, "", "    ")
 	if (err == nil) {
-		log.Printf("Post to %s\n%s\n returned %s", urlToPost, string(jb), resp.Status)
+		log.Printf("Post to %s\n%s\n returned %s\n", urlToPost, string(jb), resp.Status)
 	}
 	if (resp.StatusCode != expectedStatusCode) {
 		return fmt.Errorf("Failed executing command %s on %s - %s", commandName, svcUrn, resp.Status)
@@ -1188,7 +1188,7 @@ clusterIp string) (*v1.Service, error) {
 	}
 
 	if (publicRoute != "") {
-		fmt.Printf("for service %s - naz route - %s", serviceName, publicRoute)
+		fmt.Printf("for service %s - naz route - %s\n", serviceName, publicRoute)
 		rcRequest.Spec.Template.Spec.Containers[0].Env =
 			append(
 				rcRequest.Spec.Template.Spec.Containers[0].Env,
@@ -1274,7 +1274,7 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 	}
 
 	if (pod.Status.Phase == "Running") {
-		log.Printf("pod %s is now running, yey", pod.Name)
+		log.Printf("pod %s is now running, yey\n", pod.Name)
 		return nil
 	} else {
 
@@ -1298,7 +1298,7 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 					)
 			}
 		}
-		return fmt.Errorf("Pod %s did not start after 180 seconds and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
+		return fmt.Errorf("Pod %s did not start after 10 freakin' minutes and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
 	}
 }
 
@@ -1313,7 +1313,7 @@ func waitForReplicationControllerPodToSchedule(client *k8sClient.Client, rc *v1.
 			return nil, fmt.Errorf("Failed searching for pods scheduled for rc %s - %s", rc.Name, err.Error());
 		}
 		if (len(rcPods) == 0) {
-			log.Printf("Could not yet find pods associated with replication controller %s", rc.Name)
+			log.Printf("Could not yet find pods associated with replication controller %s\n", rc.Name)
 		} else {
 			thePod := rcPods[0]
 			log.Printf("Found Pod %s, scheduled for rc %s\n", thePod.Name, rc.Name)
@@ -1342,7 +1342,7 @@ func deployK8SService(client *k8sClient.Client, svc *v1.Service, force bool) (*v
 }
 
 func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPath string) error {
-	fmt.Printf("creating the application template using %s, icon:%s", templatePath, iconPath)
+	fmt.Printf("creating the application template using %s, icon:%s\n", templatePath, iconPath)
 	err, orcsServiceUrl := getOrcsServiceUrl(ctx)
 	if (err != nil) {
 		return err
@@ -1406,7 +1406,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 			log.Println("Whatever - failed posting app template icon - " + err.Error())
 		}
 	}
-	fmt.Printf("successfully created application template using %s, icon:%s", templatePath, iconPath)
+	fmt.Printf("successfully created application template using %s, icon:%s\n", templatePath, iconPath)
 	return nil;
 }
 
@@ -1468,7 +1468,7 @@ func waitForServiceToBeStarted(ctx *cmd.DeployerContext, serviceEndpoint string)
 			fmt.Printf("Service %s started successfully\n", serviceEndpoint)
 			return nil;
 		} else {
-			log.Printf("service %s is not ready yet - %s", serviceEndpoint, err.Error())
+			log.Printf("service %s is not ready yet - %s\n", serviceEndpoint, err.Error())
 		}
 		time.Sleep(5 * time.Second)
 	}
@@ -1482,7 +1482,7 @@ func verifyOrcsServiceHasStarted(ctx *cmd.DeployerContext, serviceEndpoint strin
 	}
 
 	stateUrl := orcsServiceUrl + "/" + serviceEndpoint + "/state"
-	log.Printf("Verifying service %s is running by getting it's status from %s", serviceEndpoint, stateUrl)
+	log.Printf("Verifying service %s is running by getting it's status from %s\n", serviceEndpoint, stateUrl)
 
 	req, err := http.NewRequest("GET", stateUrl, nil)
 	if err != nil {

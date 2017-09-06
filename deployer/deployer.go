@@ -1264,12 +1264,47 @@ func deployK8SReplicationController(client *k8sClient.Client, serviceName string
 
 func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 	var err error = nil
+	var numberOfEventsEncountered int = 0
 	// now we want to see that the stupid pod is really starting!
-	for retries := 180; pod.Status.Phase != "Running" && retries > 0; retries-- {
+	for retries := 900; pod.Status.Phase != "Running" && retries > 0; retries-- {
 		pod, err = client.GetPodInfo(pod.Name)
 		if (err != nil) {
 			return fmt.Errorf("Failed getting pod %s while waiting for it to be a sweetheart and run - %s", pod.Name, err.Error());
 		}
+		if pod.Status.ContainerStatuses[0].State.Waiting != nil &&
+			pod.Status.ContainerStatuses[0].State.Waiting.Reason == "ErrImagePull" {
+			return fmt.Errorf("Pod %s failed to start. failed pulling image %s - %s", pod.Name, pod.Status.ContainerStatuses[0].Image, pod.Status.ContainerStatuses[0].State.Waiting.Message)
+
+		} else if (pod.Status.ContainerStatuses[0].State.Terminated != nil) {
+			break;
+		}
+
+		// Getting pod events in order to print to console progress
+		podEvents, err := client.ListEntityEvents(pod.UID)
+
+		// In case we have an error when collecting events, skip it, we this is for logging only
+		if (err != nil) {
+			log.Printf("Failed listing pod %s events while waiting for it to start, oh well - %s\n", pod.Name, err.Error())
+		}
+
+		// In case we encounter new events, we log them
+		if (len(podEvents) > numberOfEventsEncountered) {
+
+			// slicing and printing only newly encountered events
+			for _, newEvent := range podEvents[numberOfEventsEncountered:] {
+				if newEvent.Reason == "Pulling" {
+					fmt.Printf("pod %s is pulling an image from docker registry. this might take a while, please be patient...\n%s\n", pod.Name, newEvent.Message)
+				} else {
+					fmt.Printf("pod %s: %s - %s\n", pod.Name, newEvent.Reason, newEvent.Message)
+				}
+			}
+
+			// Updating events already printed to log
+			numberOfEventsEncountered = len(podEvents)
+		}
+
+
+
 		time.Sleep(1 * time.Second)
 	}
 
@@ -1298,7 +1333,7 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 					)
 			}
 		}
-		return fmt.Errorf("Pod %s did not start after 10 freakin' minutes and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
+		return fmt.Errorf("Pod %s did not start after 15 freakin' minutes and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
 	}
 }
 

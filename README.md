@@ -1,38 +1,48 @@
 Ocopea Kubernetes Extension
 ======================
 
-Ocopea extension for Kubernetes is an extensible application-level copy management extention for [kubernetes](https://kubernetes.io).
+Ocopea is an extensible application-level copy management extention for [kubernetes](https://kubernetes.io).
 
 
 ## Description
-Ocopea kubernetes extension significantly simplifies copy management of complex multi-microservice apps. untangling complexity of scheduled backups, orchestrating restoration of copies for test-dev use cases and automated tests are the some of the most common tasks our rich API and UI offers.
-The focus of the project is to simplify the management of modern apps state by standardizing stateful services APIs and ubiquitous language. Our extensible APIs enable support for any type of stateful service(Data Service), Backend storage, and copy target. Whether your data is stored on an RDS database on AWS or on premises on DB2 - Ocopea is built to suit your needs.
-Integrated with popular developer tools the extension comes with features that would speed up the development process and boost the quality of the pipeline tests.
+Ocopea kubernetes extension significantly simplifies copy management of complex multi-microservice apps in multi cluster 
+environments. untangling complexity of scheduled backups, orchestrating restoration of copies for test-dev use cases and 
+automated tests are the some of the most common tasks our rich API and UI offers. The focus of the project is to 
+simplify the management of modern apps state by standardizing stateful services APIs and ubiquitous language. 
+Our extensible APIs enable support for any type of stateful service(Data Service), Backend storage, and copy target. 
+Whether your data is stored on an RDS database on AWS or on premises on DB2 - Ocopea is built to suit your needs.
+Integrated with popular developer tools the extension comes with features that would speed up the development process 
+and boost the quality of the pipeline tests.
 
 Ocopea kubernetes extension supports the following functions:
 
 ## Workflows
 - Take periodic backups of multi-container apps for all the supported data services
 - Restore backups to running app instances
-- Manage developer hydrated and running copies of app versions
+- Manage developer hydrated and running copies of selected app versions
 
 ## Support matrix
 - Built in support for mongodb and mysql backups
-- Simple api and UI for adding support for additional database support (either SaaS e.g. AWS RDS, or google spanner) or self managed (e.g. Oracle, DB2 on premises)
-- Simple api and UI for adding support for persistent volume snapshot manager (e.g. AWS EBS, google persistent disks)
-- Default built in target storage for backups (Copy Repository) based on postgres large objects
-- Simple api and UI for extending target storage (Copy Repository Brokers) for other platforms (e.g. AWS glacier, Google nearline, or an on premise PBBA like Datadomain)
-- Integrate with private docker registries to store app image copies
+- Simple api and UI for adding database support (either SaaS e.g. AWS RDS, or google spanner) or self managed (e.g. Oracle, DB2 on premises)
+- Simple api and UI for adding persistent volume snapshot manager (e.g. AWS EBS, google persistent disks)
+- Default built in target storage for backups (Copy Repository) based on Postgres large objects
+- Simple api and UI for extending target storage (Copy Repository Brokers) for other platforms 
+(e.g. AWS glacier, Google Nearline, or an on premise PBBA like Datadomain)
+- Integrate with private docker registries for storing app image copies
 
 ## Developer tools
 
-- Allows integration with registered and supported third party tools such as Jira and Pivotal tracker to enable test dev workflows, by allowing tracking of copies to related issues.
-- API for managing pipeline automated tests with real data
+- Integration with third party tools such as Jira and Pivotal tracker to enable test dev workflows, 
+by allowing tracking of copies to related issues.
+- API for managing pipeline automated tests using production data
 
 
 ## Open Service Broker (OSB)
 
-The Ocopea project loves [Open Service Broker](https://openservicebrokerapi.org), and our maintainers are involved in the OSB committee. Our vision is to make software simpler to build by allowing vendors to publish their services with data protection built in using the OSB backup & restore natives
+The Ocopea project loves [Open Service Broker](https://openservicebrokerapi.org), 
+and our maintainers are involved in the OSB committee. 
+Our vision is to make software simpler to build by allowing vendors to publish their services with 
+data protection built in using the OSB backup & restore natives
 
 ## Architecture
 
@@ -76,20 +86,51 @@ It integrates data and copy service brokers with PCF and K8s environment and pro
 Project Ocopea is an application-level copy management orchestrator for cloud native apps.
 
 ## Installation
-All you'll have to do in order to start using ocopea is clone this repo under your go root and start playing
-
-## Usage Instructions
-deploying ocopea site on your kubernetes cluster is as simple as running the following command:
-
-```bash
-
-# configuring kubectl proxy avoiding passing k8s cluster credentials to ocopea
-kubectl proxy -p 8080
-
-# deploying the default site settings
-go run deployer.go deploy-site -local-cluster-ip=[k8s cluster ip]
+All you'll have to do in order to start using ocopea is clone this repo under your GOPATH and start playing
 
 ```
+$ cd $GOPATH/src
+$ mkdir ocopea
+$ cd ocopea
+$ git clone https://github.com/ocopea/kubernetes.git
+```
+
+## Usage Instructions
+deploying ocopea site on your kubernetes cluster is as simple as running one command.
+For simplicity, we recommend using kubectl proxy instead of passing api info for ocopea
+
+```
+$ $ kubectl proxy -p 8080
+```
+
+When deploying to an on premises cluster(local deployment), pass the kubernetes cluster ip as the *local-cluster-ip*
+Use the *site-name* flag to name the site (e.g. "Durham datacenter")
+otherwise the cluster ip will be used to identify the site
+
+```
+$ cd deployer
+$ go run deployer.go deploy-site -local-cluster-ip={k8s cluster ip} [-site-name={your site name}] 
+```
+
+When deploying to a public cloud cluster(e.g. gce, aws), use the *deployment-type* flag with the cloud of choice.
+It is recommended to set the *site-name* flag to match the cluster name in the cloud platform
+(e.g. gcloud cluster name). 
+
+```
+$ cd deployer
+$ go run deployer.go deploy-site -deployment-type=gce -user={...} -password={...} -site-name=europe-west2-c1 
+```
+
+The easiest way to explore ocopea on your laptop is by using minikube. minikube deployment is no different than other local clusters
+
+```
+$ minikube start
+$ $ kubectl proxy -p 8080
+$ cd deployer
+$ go run deployer.go deploy-site -local-cluster-ip=$(minikube ip) 
+```
+
+Use the *-cleanup=true* if you wish to redeploy to the same site
 
 
 ## Kubernetes snapshot

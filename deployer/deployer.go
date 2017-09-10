@@ -115,7 +115,7 @@ func deploySite(ctx *cmd.DeployerContext) error {
 
 	// In case no site name is supplied - site name becomes the kubernetes cluster ip
 	if *deploySiteArgs.siteName == "" {
-		if (ctx.ClusterIp == "") {
+		if ctx.ClusterIp == "" {
 			return errors.New("Site name is not defined, please use the site-name flag")
 		}
 		fmt.Println("No site name defined - defaulting to cluster ip - " + ctx.ClusterIp)
@@ -322,7 +322,7 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	)
 
 	if err == nil {
-		fmt.Printf("Site %s has been configured successfully with local hub", *deploySiteArgs.siteName)
+		fmt.Printf("Site %s has been configured successfully with local hub\n", *deploySiteArgs.siteName)
 	} else {
 		return err
 	}

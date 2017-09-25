@@ -33,8 +33,9 @@ type deployServiceInfo struct {
 }
 
 type deploySiteArgsBag struct {
-	siteName *string
-	cleanup  *bool
+	siteName           *string
+	cleanup            *bool
+	verboseSiteLogging *bool
 }
 
 var deploySiteArgs *deploySiteArgsBag
@@ -209,7 +210,10 @@ func deploySite(ctx *cmd.DeployerContext) error {
 			v1.EnvVar{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
 			v1.EnvVar{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace})
 
-	rootConfNode := createOrcsServicesConfiguration(pgService, *deploySiteArgs.siteName)
+	rootConfNode := createOrcsServicesConfiguration(
+		pgService,
+		*deploySiteArgs.siteName,
+		*deploySiteArgs.verboseSiteLogging)
 
 	// Appending the configuration env var
 	b, err := json.Marshal(rootConfNode)
@@ -268,7 +272,7 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	}
 
 	if publicRoute != "" {
-		fmt.Printf("for service orcs - naz route - %s", publicRoute)
+		fmt.Printf("for service orcs - naz route - %s\n", publicRoute)
 		rcRequest.Spec.Template.Spec.Containers[0].Env =
 			append(
 				rcRequest.Spec.Template.Spec.Containers[0].Env,
@@ -379,7 +383,9 @@ func deploySite(ctx *cmd.DeployerContext) error {
 
 func createOrcsServicesConfiguration(
 	pgService *v1.Service,
-	siteName string) configuration.StaticConfigurationNode {
+	siteName string,
+	verboseLogging bool,
+) configuration.StaticConfigurationNode {
 	// building static configuration environment variable
 	rootConfNode := configuration.StaticConfigurationNode{
 		Children: make(map[string]configuration.StaticConfigurationNode),
@@ -437,8 +443,8 @@ func createOrcsServicesConfiguration(
 	}
 
 	// Register hub stuff
-	buildHubServiceConfiguration(&rootConfNode, pgService)
-	buildSiteServiceConfiguration(&rootConfNode, pgService, siteName)
+	buildHubServiceConfiguration(&rootConfNode, pgService, verboseLogging)
+	buildSiteServiceConfiguration(&rootConfNode, pgService, siteName, verboseLogging)
 
 	return rootConfNode
 
@@ -464,7 +470,11 @@ func getOrcsServiceUrl(ctx *cmd.DeployerContext) (error, string) {
 
 }
 
-func buildHubServiceConfiguration(rootConfig *configuration.StaticConfigurationNode, pgService *v1.Service) {
+func buildHubServiceConfiguration(
+	rootConfig *configuration.StaticConfigurationNode,
+	pgService *v1.Service,
+	verboseLogging bool,
+) {
 	serviceConfigConfNode := rootConfig.Children["serviceconfig"]
 	dataSourceConfNode := rootConfig.Children["datasource"]
 	blobStoreConfNode := rootConfig.Children["blobstore"]
@@ -495,6 +505,17 @@ func buildHubServiceConfiguration(rootConfig *configuration.StaticConfigurationN
 	dataSourceConfNode.Children["hub-db"] = hubDsConfNode
 	blobStoreConfNode.Children["image-store"] = blobStoreDbConf
 
+	var hubServiceParameters map[string]string = nil
+	var hubWebServiceParameters map[string]string = nil
+	if verboseLogging {
+		hubServiceParameters = map[string]string{
+			"print-all-json-requests": "true",
+		}
+		hubWebServiceParameters = map[string]string{
+			"print-all-json-requests": "true",
+		}
+	}
+
 	serviceConfigConfNode.Children["hub"] = configuration.StaticConfigurationNode{
 		Data: configuration.ServiceConfig{
 			ServiceURI: "hub",
@@ -505,6 +526,7 @@ func buildHubServiceConfiguration(rootConfig *configuration.StaticConfigurationN
 				},
 			},
 			GlobalLoggingConfig: "DEBUG",
+			Parameters:          hubServiceParameters,
 		},
 	}
 
@@ -518,6 +540,7 @@ func buildHubServiceConfiguration(rootConfig *configuration.StaticConfigurationN
 				},
 			},
 			GlobalLoggingConfig: "DEBUG",
+			Parameters:          hubWebServiceParameters,
 		},
 	}
 }
@@ -533,7 +556,11 @@ func addQueue(rootConfig *configuration.StaticConfigurationNode, queueName strin
 		},
 	}
 }
-func buildSiteServiceConfiguration(rootConfig *configuration.StaticConfigurationNode, pgService *v1.Service, siteName string) {
+func buildSiteServiceConfiguration(
+	rootConfig *configuration.StaticConfigurationNode,
+	pgService *v1.Service,
+	siteName string,
+	verboseLogging bool) {
 	serviceConfigConfNode := rootConfig.Children["serviceconfig"]
 	dataSourceConfNode := rootConfig.Children["datasource"]
 	blobStoreConfNode := rootConfig.Children["blobstore"]
@@ -582,6 +609,27 @@ func buildSiteServiceConfiguration(rootConfig *configuration.StaticConfiguration
 	dataSourceConfNode.Children["protection-db"] = protectionDsConfNode
 	blobStoreConfNode.Children["copy-store"] = blobStoreDbConf
 
+	var siteServiceParameters map[string]string = map[string]string{
+		"site-name": siteName,
+		"location": "{" +
+			"\"latitude\":32.1792126," +
+			"\"longitude\":34.9005128," +
+			"\"name\":\"Israel\"," +
+			"\"properties\":{}}",
+	}
+
+	var protectionServiceParameters map[string]string = nil
+	var shpanCopyStoreServiceParameters map[string]string = nil
+	if verboseLogging {
+		protectionServiceParameters = map[string]string{
+			"print-all-json-requests": "true",
+		}
+		shpanCopyStoreServiceParameters = map[string]string{
+			"print-all-json-requests": "true",
+		}
+		siteServiceParameters["print-all-json-requests"] = "true"
+	}
+
 	serviceConfigConfNode.Children["site"] = configuration.StaticConfigurationNode{
 		Data: configuration.ServiceConfig{
 			ServiceURI: "site",
@@ -609,14 +657,7 @@ func buildSiteServiceConfiguration(rootConfig *configuration.StaticConfiguration
 					LogInDebug: true,
 				},
 			},
-			Parameters: map[string]string{
-				"site-name": siteName,
-				"location": "{" +
-					"\"latitude\":32.1792126," +
-					"\"longitude\":34.9005128," +
-					"\"name\":\"Israel\"," +
-					"\"properties\":{}}",
-			},
+			Parameters:          siteServiceParameters,
 			GlobalLoggingConfig: "DEBUG",
 		},
 	}
@@ -649,14 +690,7 @@ func buildSiteServiceConfiguration(rootConfig *configuration.StaticConfiguration
 					LogInDebug: true,
 				},
 			},
-			Parameters: map[string]string{
-				"site-name": "minikube",
-				"location": "{" +
-					"\"latitude\":32.1792126," +
-					"\"longitude\":34.9005128," +
-					"\"name\":\"Israel\"," +
-					"\"properties\":{}}",
-			},
+			Parameters:          protectionServiceParameters,
 			GlobalLoggingConfig: "DEBUG",
 		},
 	}
@@ -672,6 +706,7 @@ func buildSiteServiceConfiguration(rootConfig *configuration.StaticConfiguration
 				},
 			},
 			GlobalLoggingConfig: "DEBUG",
+			Parameters:          shpanCopyStoreServiceParameters,
 		},
 	}
 }
@@ -971,8 +1006,9 @@ func defineDeploySiteCommand() *cmd.DeployerCommand {
 	cmd.FlagSet = flag.NewFlagSet(cmd.Name, flag.ExitOnError)
 
 	deploySiteArgs = &deploySiteArgsBag{
-		siteName: cmd.FlagSet.String("site-name", "", "Site Name"),
-		cleanup:  cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
+		siteName:           cmd.FlagSet.String("site-name", "", "Site Name"),
+		cleanup:            cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
+		verboseSiteLogging: cmd.FlagSet.Bool("verbose-site-logging", false, "Make the site logging verbose"),
 	}
 	return cmd
 }

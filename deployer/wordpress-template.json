@@ -1,0 +1,54 @@
+{
+  "name":"wordpress",
+  "version":"1.0",
+  "description":"Wordpress Content Management",
+  "entryPointServiceName":"wordpress",
+  "appServiceTemplates":[
+    {
+      "appServiceName":"wordpress",
+      "psbType":"k8s",
+      "imageName":"wordpress",
+      "imageType":"apache-webserver",
+      "imageVersion":"4.7.3-apache",
+      "psbSettings":{
+
+      },
+      "environmentVariables":{
+        "WORDPRESS_DB_HOST":"${wordpress-mysql.host}",
+        "WORDPRESS_DB_USER":"${wordpress-mysql.username}",
+        "WORDPRESS_DB_PASSWORD":"${wordpress-mysql.password}"
+      },
+      "dependencies":[
+        {
+          "type":"DATABASE",
+          "name":"wordpress-mysql",
+          "description":"Wordpress Database",
+          "protocols":[
+            {
+              "protocolName":"mysql",
+              "version":null,
+              "conditions":null
+            }
+          ]
+        },
+        {
+          "type":"OTHER",
+          "name":"wp-volume",
+          "description":"Wordpress Volume",
+          "protocols":[
+            {
+              "protocolName":"docker-volume",
+              "version":null,
+              "conditions":null
+            }
+          ]
+        }
+      ],
+      "exposedPorts":[
+        80
+      ],
+      "httpPort":80,
+      "entryPointUrl":"/"
+    }
+  ]
+}

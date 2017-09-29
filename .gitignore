@@ -1,0 +1,23 @@
+# Visual studio
+/.vscode
+
+# Maven generated files
+**/target/
+
+# Eclipse generated files
+.project
+.classpath
+.settings/
+**/.project
+**/.classpath
+**/.gitignore
+**/.settings/
+
+# IntelliJ generated files
+**/*.iml
+.idea
+
+# NetBeans
+**/nbactions.xml
+
+deployer/deployer.log

@@ -84,7 +84,7 @@ type serviceRegistrationDetail struct {
 	AlternativePathSuffix string
 }
 
-func deployPostgres(ctx *cmd.DeployerContext) error {
+func deployPostgres(ctx *cmd.DeployerContext) (*v1.Service, error) {
 	// Deploy pg service
 	pgSvc, err := deployService(
 		ctx.Client,
@@ -104,15 +104,198 @@ func deployPostgres(ctx *cmd.DeployerContext) error {
 		ctx.ClusterIp)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	fmt.Println("postgres is here " + pgSvc.Spec.ClusterIP)
-	return err
+	fmt.Println("postgres deployed, verifying connectivity" + pgSvc.Spec.ClusterIP)
+
+	// verifying postgres is started
+	pgService, err := ctx.Client.WaitForServiceToStart("nazdb", 100, 3*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("postgres deployed at %s\n", pgService.Spec.ClusterIP)
+
+	return pgService, nil
+
+}
+
+func deployOrcsService(
+	ctx *cmd.DeployerContext,
+	pgService *v1.Service,
+) (*v1.Service, error) {
+
+	// Creating the service descriptor
+	svc, err := createK8SServiceStruct(
+		"orcs",
+		ctx.DeploymentType,
+		true,
+		80,
+		8080,
+		[]v1.ServicePort{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Deploying the service onto k8s and waiting for it to start
+	fmt.Println("deploying the orcs service")
+	svc, err = deployK8SService(ctx.Client, svc, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var serviceUrl string
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		serviceUrl =
+			"http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":80"
+	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
+		serviceUrl = "http://" + ctx.ClusterIp + ":" +
+			strconv.Itoa(svc.Spec.Ports[0].NodePort)
+	} else {
+		return nil, errors.New("Failed locating public Url when deploying orcs")
+	}
+
+	fmt.Println("orcs service deployed successfuly")
+	log.Printf("orcs service deployed to %s/hub-web-api/html/ui/index.html\n", serviceUrl)
+
+	rcRequest, err := createReplicationControllerStruct(
+		"orcs",
+		ctx.DeploymentType,
+		"ocopea/orcs-k8s-runner",
+		"orcs")
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed creating replication controller for orcs - %s", err.Error())
+	}
+
+	//todo:amit: I don't think we need this in orcs container
+	rcRequest.Spec.Template.Spec.Containers[0].Env =
+		append(
+			rcRequest.Spec.Template.Spec.Containers[0].Env,
+			v1.EnvVar{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
+			v1.EnvVar{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
+			v1.EnvVar{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace})
+
+	rootConfNode := createOrcsServicesConfiguration(
+		pgService,
+		*deploySiteArgs.siteName,
+		*deploySiteArgs.verboseSiteLogging)
+
+	// Appending the configuration env var
+	b, err := json.Marshal(rootConfNode)
+	if err != nil {
+		return nil, fmt.Errorf("Failed parsing configuraiton env var for orcs container - %s", err.Error())
+	}
+	confJson := string(b)
+
+	log.Printf("orcs configuration json %s\n", confJson)
+
+	rcRequest.Spec.Template.Spec.Containers[0].Env =
+		append(
+			rcRequest.Spec.Template.Spec.Containers[0].Env,
+			v1.EnvVar{Name: "NAZ_MS_CONF", Value: confJson})
+
+	// todo:amit:check what is this NAZ_PUBLIC_ROUTE shit
+	var publicRoute string
+	additionalPortsJSON := ""
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		for _, currPort := range svc.Spec.Ports {
+			if currPort.Name == "service-http" {
+				publicRoute = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":" +
+					strconv.Itoa(currPort.Port)
+			} else {
+				if additionalPortsJSON == "" {
+					additionalPortsJSON = "{"
+				} else {
+					additionalPortsJSON += ","
+				}
+				// Adding env var telling the container which port has been mapped to the
+				// requested additional port
+				additionalPortsJSON += "\"" + currPort.Name + "\":\"" +
+					strconv.Itoa(currPort.Port) + "\""
+			}
+		}
+		if publicRoute == "" {
+			return nil, errors.New("Failed assigning public port to service orcs")
+		}
+
+	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
+		for _, currPort := range svc.Spec.Ports {
+			if currPort.Name == "service-http" {
+				publicRoute = "http://" + ctx.ClusterIp + ":" + strconv.Itoa(currPort.NodePort)
+			} else {
+				// Adding env var telling the container which port has been mapped to the
+				// requested additional port
+				if additionalPortsJSON == "" {
+					additionalPortsJSON = "{"
+				} else {
+					additionalPortsJSON += ","
+				}
+				// Adding env var telling the container which port has been mapped to the
+				// requested additional port
+				additionalPortsJSON += "\"" + currPort.Name + "\":\"" +
+					strconv.Itoa(currPort.NodePort) + "\""
+			}
+		}
+		if publicRoute == "" {
+			return nil, errors.New("Failed assigning NodePort to service orcs")
+		}
+	}
+
+	if publicRoute != "" {
+		fmt.Printf("for service orcs - naz route - %s\n", publicRoute)
+		rcRequest.Spec.Template.Spec.Containers[0].Env =
+			append(
+				rcRequest.Spec.Template.Spec.Containers[0].Env,
+				v1.EnvVar{Name: "NAZ_PUBLIC_ROUTE", Value: publicRoute})
+	}
+
+	if ctx.DeploymentType == "local" {
+		rcRequest.Spec.Template.Spec.Containers[0].Env =
+			append(
+				rcRequest.Spec.Template.Spec.Containers[0].Env,
+				v1.EnvVar{Name: "LOCAL_CLUSTER_IP", Value: ctx.ClusterIp})
+
+	}
+
+	fmt.Println("Deploying the orcs replication controller")
+	_, err = deployK8SReplicationController(ctx.Client, "orcs", rcRequest, true)
+	if err != nil {
+		return nil, fmt.Errorf("Failed creating replication controller for orcs - %s", err.Error())
+	}
+	fmt.Println("Orcs replication controller has been deployed successfuly")
+	time.Sleep(1 * time.Second)
+
+	// Verifying all services have started
+	err = waitForServiceToBeStarted(ctx, "site-api")
+	if err != nil {
+		return nil, err
+	}
+	err = waitForServiceToBeStarted(ctx, "hub-api")
+	if err != nil {
+		return nil, err
+	}
+	err = waitForServiceToBeStarted(ctx, "hub-web-api")
+	if err != nil {
+		return nil, err
+	}
+	err = waitForServiceToBeStarted(ctx, "protection-api")
+	if err != nil {
+		return nil, err
+	}
+	err = waitForServiceToBeStarted(ctx, "shpan-copy-store-api")
+	if err != nil {
+		return nil, err
+	}
+
+	return svc, nil
 
 }
 
 func deploySite(ctx *cmd.DeployerContext) error {
+
+	// Validating command arguments
 
 	// In case no site name is supplied - site name becomes the kubernetes cluster ip
 	if *deploySiteArgs.siteName == "" {
@@ -144,173 +327,23 @@ func deploySite(ctx *cmd.DeployerContext) error {
 
 	// First we deploy an empty postgres used to store site data
 	// todo: allow attaching to existing postgres (e.g. RDS pg)
-
 	fmt.Println("Deploying postgres database onto the cluster to be used by the site")
-	err = deployPostgres(ctx)
+	pgService, err := deployPostgres(ctx)
 	if err != nil {
 		return err
 	}
 
-	// verifying postgres is started
-	pgService, err := ctx.Client.WaitForServiceToStart("nazdb", 100, 3*time.Second)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("postgres deployed at %s\n", pgService.Spec.ClusterIP)
-
-	// Creating the service descriptor
-	svc, err := createK8SServiceStruct(
-		"orcs",
-		ctx.DeploymentType,
-		true,
-		80,
-		8080,
-		[]v1.ServicePort{})
-
+	// Deploying the Orcs service
+	orcsService, err := deployOrcsService(ctx, pgService)
 	if err != nil {
 		return err
 	}
 
-	// Deploying the service onto k8s and waiting for it to start
-	fmt.Println("deploying the orcs service")
-	svc, err = deployK8SService(ctx.Client, svc, true)
+	// Building the root URL used by the orcs component
+	rootUrl, err := buildOrcsServiceRootUrl(orcsService, ctx)
 	if err != nil {
 		return err
 	}
-
-	var serviceUrl string
-	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
-		serviceUrl =
-			"http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":80"
-	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
-		serviceUrl = "http://" + ctx.ClusterIp + ":" +
-			strconv.Itoa(svc.Spec.Ports[0].NodePort)
-	} else {
-		return errors.New("Failed locating public Url when deploying orcs")
-	}
-
-	fmt.Println("orcs service deployed successfuly")
-	log.Printf("orcs service deployed to %s/hub-web-api/html/ui/index.html\n", serviceUrl)
-
-	rcRequest, err := createReplicationControllerStruct(
-		"orcs",
-		ctx.DeploymentType,
-		"ocopea/orcs-k8s-runner",
-		"orcs")
-
-	if err != nil {
-		return fmt.Errorf("Failed creating replication controller for orcs - %s", err.Error())
-	}
-
-	//todo:amit: I don't think we need this in orcs container
-	rcRequest.Spec.Template.Spec.Containers[0].Env =
-		append(
-			rcRequest.Spec.Template.Spec.Containers[0].Env,
-			v1.EnvVar{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
-			v1.EnvVar{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			v1.EnvVar{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace})
-
-	rootConfNode := createOrcsServicesConfiguration(
-		pgService,
-		*deploySiteArgs.siteName,
-		*deploySiteArgs.verboseSiteLogging)
-
-	// Appending the configuration env var
-	b, err := json.Marshal(rootConfNode)
-	if err != nil {
-		return fmt.Errorf("Failed parsing configuraiton env var for orcs container - %s", err.Error())
-	}
-	confJson := string(b)
-
-	log.Printf("orcs configuration json %s\n", confJson)
-
-	rcRequest.Spec.Template.Spec.Containers[0].Env =
-		append(
-			rcRequest.Spec.Template.Spec.Containers[0].Env,
-			v1.EnvVar{Name: "NAZ_MS_CONF", Value: confJson})
-
-	// todo:amit:check what is this NAZ_PUBLIC_ROUTE shit
-	var publicRoute string
-	additionalPortsJSON := ""
-	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
-		for _, currPort := range svc.Spec.Ports {
-			if currPort.Name == "service-http" {
-				publicRoute = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":" +
-					strconv.Itoa(currPort.Port)
-			} else {
-				if additionalPortsJSON == "" {
-					additionalPortsJSON = "{"
-				} else {
-					additionalPortsJSON += ","
-				}
-				// Adding env var telling the container which port has been mapped to the requested additional port
-				additionalPortsJSON += "\"" + currPort.Name + "\":\"" + strconv.Itoa(currPort.Port) + "\""
-			}
-		}
-		if publicRoute == "" {
-			return errors.New("Failed assigning public port to service orcs")
-		}
-
-	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
-		for _, currPort := range svc.Spec.Ports {
-			if currPort.Name == "service-http" {
-				publicRoute = "http://" + ctx.ClusterIp + ":" + strconv.Itoa(currPort.NodePort)
-			} else {
-				// Adding env var telling the container which port has been mapped to the requested additional port
-				if additionalPortsJSON == "" {
-					additionalPortsJSON = "{"
-				} else {
-					additionalPortsJSON += ","
-				}
-				// Adding env var telling the container which port has been mapped to the requested additional port
-				additionalPortsJSON += "\"" + currPort.Name + "\":\"" + strconv.Itoa(currPort.NodePort) + "\""
-			}
-		}
-		if publicRoute == "" {
-			return errors.New("Failed assigning NodePort to service orcs")
-		}
-	}
-
-	if publicRoute != "" {
-		fmt.Printf("for service orcs - naz route - %s\n", publicRoute)
-		rcRequest.Spec.Template.Spec.Containers[0].Env =
-			append(
-				rcRequest.Spec.Template.Spec.Containers[0].Env,
-				v1.EnvVar{Name: "NAZ_PUBLIC_ROUTE", Value: publicRoute})
-	}
-
-	if ctx.DeploymentType == "local" {
-		rcRequest.Spec.Template.Spec.Containers[0].Env =
-			append(
-				rcRequest.Spec.Template.Spec.Containers[0].Env,
-				v1.EnvVar{Name: "LOCAL_CLUSTER_IP", Value: ctx.ClusterIp})
-
-	}
-
-	fmt.Println("Deploying the orcs replication controller")
-	_, err = deployK8SReplicationController(ctx.Client, "orcs", rcRequest, true)
-	if err != nil {
-		return fmt.Errorf("Failed creating replication controller for orcs - %s", err.Error())
-	}
-	fmt.Println("Orcs replication controller has been deployed successfuly")
-	time.Sleep(1 * time.Second)
-
-	var rootUrl string
-	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
-		//todo:2: read correct port from service
-		rootUrl = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer)
-	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
-		rootUrl = "http://" + ctx.ClusterIp + ":" + strconv.Itoa(svc.Spec.Ports[0].NodePort)
-	} else {
-		return fmt.Errorf("Unsupported service type returned for root service %s\n", svc.Spec.Type)
-	}
-
-	// Verifying all services have started
-	waitForServiceToBeStarted(ctx, "site-api")
-	waitForServiceToBeStarted(ctx, "hub-api")
-	waitForServiceToBeStarted(ctx, "hub-web-api")
-	waitForServiceToBeStarted(ctx, "protection-api")
-	waitForServiceToBeStarted(ctx, "shpan-copy-store-api")
 
 	// Connecting site to the hub
 	fmt.Printf("Configuring site %s to the local hub", *deploySiteArgs.siteName)
@@ -320,18 +353,19 @@ func deploySite(ctx *cmd.DeployerContext) error {
 		"add-site",
 		resourceLocation{
 			Urn: "site",
-			Url: fmt.Sprintf("http://%s:%d/site-api", svc.Spec.ClusterIP, svc.Spec.Ports[0].Port),
+			Url: fmt.Sprintf("http://%s:%d/site-api",
+				orcsService.Spec.ClusterIP,
+				orcsService.Spec.Ports[0].Port),
 		},
 		http.StatusOK,
 	)
-
 	if err == nil {
 		fmt.Printf("Site %s has been configured successfully with local hub\n", *deploySiteArgs.siteName)
 	} else {
 		return err
 	}
 
-	// Creating app template
+	// Creating the lets-chat app template
 	err = createAppTemplateOrcs(
 		ctx,
 		"lets-chat-template.json",
@@ -340,6 +374,8 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	if err != nil {
 		return fmt.Errorf("Failed creating application template - %s", err.Error())
 	}
+
+	// Creating the wordpress app template
 	err = createAppTemplateOrcs(
 		ctx,
 		"wordpress-template.json",
@@ -350,17 +386,23 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	}
 
 	// Registering the default crb
-	err = registerCrbOrcs(ctx, "shpan-copy-store", fmt.Sprintf("http://%s:%d/shpan-copy-store-api", svc.Spec.ClusterIP, svc.Spec.Ports[0].Port))
+	err = registerCrbOrcs(
+		ctx,
+		"shpan-copy-store",
+		fmt.Sprintf(
+			"http://%s:%d/shpan-copy-store-api",
+			orcsService.Spec.ClusterIP,
+			orcsService.Spec.Ports[0].Port))
 	if err != nil {
 		return err
 	}
 
-	// Deploying k8spsb
+	// Deploying Kubernetes PSB
 	err = deployK8sPsbOrcs(ctx)
 	if err != nil {
 		return err
 	}
-	// Deploying mongo-dsb
+	// Deploying mongo DSB
 	err = deployMongoDsbOrcs(ctx)
 	if err != nil {
 		return err
@@ -379,6 +421,17 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	fmt.Printf("Ocopea4k8s has been deployed!, wanna ride? at:\n%s/hub-web-api/html/nui/index.html\n", rootUrl)
 
 	return nil
+}
+
+func buildOrcsServiceRootUrl(orcsService *v1.Service, ctx *cmd.DeployerContext) (string, error) {
+	if orcsService.Spec.Type == v1.ServiceTypeLoadBalancer {
+		return "http://" + extractLoadBalancerAddress(orcsService.Status.LoadBalancer), nil
+	} else if orcsService.Spec.Type == v1.ServiceTypeNodePort {
+		return "http://" + ctx.ClusterIp + ":" + strconv.Itoa(orcsService.Spec.Ports[0].NodePort), nil
+	} else {
+		return "", fmt.Errorf("Unsupported service type returned for orcs service %s\n", orcsService.Spec.Type)
+	}
+
 }
 
 func createOrcsServicesConfiguration(
@@ -450,24 +503,13 @@ func createOrcsServicesConfiguration(
 
 }
 
-func getOrcsServiceUrl(ctx *cmd.DeployerContext) (error, string) {
+func getOrcsServiceUrl(ctx *cmd.DeployerContext) (string, error) {
 	orcsService, err := ctx.Client.GetServiceInfo("orcs")
 	if err != nil {
-		return fmt.Errorf("Failed locating orcs service service - %s", err.Error()), ""
+		return "", fmt.Errorf("Failed locating orcs service service - %s", err.Error())
 	}
 
-	var serviceUrl string
-	if orcsService.Spec.Type == v1.ServiceTypeLoadBalancer {
-		serviceUrl =
-			"http://" + extractLoadBalancerAddress(orcsService.Status.LoadBalancer) + ":80"
-	} else if orcsService.Spec.Type == v1.ServiceTypeNodePort {
-		serviceUrl = "http://" + ctx.ClusterIp + ":" +
-			strconv.Itoa(orcsService.Spec.Ports[0].NodePort)
-	} else {
-		return errors.New("Failed locating public Url when deploying orcs"), ""
-	}
-	return nil, serviceUrl
-
+	return buildOrcsServiceRootUrl(orcsService, ctx)
 }
 
 func buildHubServiceConfiguration(
@@ -935,7 +977,7 @@ func postCommandOrcs(
 	commandName string,
 	jsonBody interface{},
 	expectedStatusCode int) error {
-	err, orcsServiceUrl := getOrcsServiceUrl(ctx)
+	orcsServiceUrl, err := getOrcsServiceUrl(ctx)
 	if err != nil {
 		return fmt.Errorf("Failed getting orcs service url - %s", err.Error())
 	}
@@ -1081,7 +1123,13 @@ func createReplicationControllerStruct(
 	return rc, nil
 
 }
-func createK8SServiceStruct(serviceName string, deploymentType string, exposePublic bool, mainPort int, mainContainerPort int, additionalPorts []v1.ServicePort) (*v1.Service, error) {
+func createK8SServiceStruct(
+	serviceName string,
+	deploymentType string,
+	exposePublic bool,
+	mainPort int,
+	mainContainerPort int,
+	additionalPorts []v1.ServicePort) (*v1.Service, error) {
 	svc := &v1.Service{}
 	svc.Name = serviceName
 
@@ -1186,15 +1234,18 @@ func deployService(
 	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
 		for _, currPort := range svc.Spec.Ports {
 			if currPort.Name == "service-http" {
-				publicRoute = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":" + strconv.Itoa(currPort.Port)
+				publicRoute = "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer) + ":" +
+					strconv.Itoa(currPort.Port)
 			} else {
 				if additionalPortsJSON == "" {
 					additionalPortsJSON = "{"
 				} else {
 					additionalPortsJSON += ","
 				}
-				// Adding env var telling the container which port has been mapped to the requested additional port
-				additionalPortsJSON += "\"" + currPort.Name + "\":\"" + strconv.Itoa(currPort.Port) + "\""
+				// Adding env var telling the container which port has been mapped to the
+				// requested additional port
+				additionalPortsJSON += "\"" + currPort.Name + "\":\"" +
+					strconv.Itoa(currPort.Port) + "\""
 			}
 		}
 		if publicRoute == "" {
@@ -1206,14 +1257,17 @@ func deployService(
 			if currPort.Name == "service-http" {
 				publicRoute = "http://" + clusterIp + ":" + strconv.Itoa(currPort.NodePort)
 			} else {
-				// Adding env var telling the container which port has been mapped to the requested additional port
+				// Adding env var telling the container which port has been mapped to the
+				// requested additional port
 				if additionalPortsJSON == "" {
 					additionalPortsJSON = "{"
 				} else {
 					additionalPortsJSON += ","
 				}
-				// Adding env var telling the container which port has been mapped to the requested additional port
-				additionalPortsJSON += "\"" + currPort.Name + "\":\"" + strconv.Itoa(currPort.NodePort) + "\""
+				// Adding env var telling the container which port has been mapped to the requested
+				// additional port
+				additionalPortsJSON += "\"" + currPort.Name + "\":\"" +
+					strconv.Itoa(currPort.NodePort) + "\""
 			}
 		}
 		if publicRoute == "" {
@@ -1255,10 +1309,17 @@ func deployService(
 
 }
 
-func deployK8SReplicationController(client *k8sClient.Client, serviceName string, rc *v1.ReplicationController, force bool) (*v1.ReplicationController, error) {
+func deployK8SReplicationController(
+	client *k8sClient.Client,
+	serviceName string,
+	rc *v1.ReplicationController,
+	force bool) (*v1.ReplicationController, error) {
 	rc, err := client.CreateReplicationController(rc, force)
 	if err != nil {
-		return nil, fmt.Errorf("Failed creating k8s replication controller for %s - %s", serviceName, err.Error())
+		return nil, fmt.Errorf(
+			"Failed creating k8s replication controller for %s - %s",
+			serviceName,
+			err.Error())
 	}
 	log.Printf("%s replication controller has been deployed successfully\n", rc.Name)
 
@@ -1266,16 +1327,23 @@ func deployK8SReplicationController(client *k8sClient.Client, serviceName string
 	for retries := 60; rc.Status.Replicas == 0 && retries > 0; retries-- {
 		rc, err = client.GetReplicationControllerInfo(rc.Name)
 		if err != nil {
-			return nil, fmt.Errorf("Failed getting k8s replication controller for %s - %s", serviceName, err.Error())
+			return nil, fmt.Errorf(
+				"Failed getting k8s replication controller for %s - %s",
+				serviceName,
+				err.Error())
 		}
 		time.Sleep(1 * time.Second)
 	}
 
 	if rc.Status.Replicas == 0 {
-		return nil, fmt.Errorf("Replication controller %s failed creating replicas after waiting for 60 seconds", rc.Name)
+		return nil, fmt.Errorf(
+			"Replication controller %s failed creating replicas after waiting for 60 seconds",
+			rc.Name)
 	}
 
-	log.Printf("%s replication controller has been deployed successfully and replicas already been observed\n", rc.Name)
+	log.Printf(
+		"%s replication controller has been deployed successfully and replicas already been observed\n",
+		rc.Name)
 
 	// Now we want to see that we have a pod scheduled by the rc
 	rcPod, err := waitForReplicationControllerPodToSchedule(client, rc)
@@ -1303,11 +1371,18 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 	for retries := 900; pod.Status.Phase != "Running" && retries > 0; retries-- {
 		pod, err = client.GetPodInfo(pod.Name)
 		if err != nil {
-			return fmt.Errorf("Failed getting pod %s while waiting for it to be a sweetheart and run - %s", pod.Name, err.Error())
+			return fmt.Errorf(
+				"Failed getting pod %s while waiting for it to be a sweetheart and run - %s",
+				pod.Name,
+				err.Error())
 		}
 		if pod.Status.ContainerStatuses[0].State.Waiting != nil &&
 			pod.Status.ContainerStatuses[0].State.Waiting.Reason == "ErrImagePull" {
-			return fmt.Errorf("Pod %s failed to start. failed pulling image %s - %s", pod.Name, pod.Status.ContainerStatuses[0].Image, pod.Status.ContainerStatuses[0].State.Waiting.Message)
+			return fmt.Errorf(
+				"Pod %s failed to start. failed pulling image %s - %s",
+				pod.Name,
+				pod.Status.ContainerStatuses[0].Image,
+				pod.Status.ContainerStatuses[0].State.Waiting.Message)
 
 		} else if pod.Status.ContainerStatuses[0].State.Terminated != nil {
 			break
@@ -1318,7 +1393,10 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 
 		// In case we have an error when collecting events, skip it, we this is for logging only
 		if err != nil {
-			log.Printf("Failed listing pod %s events while waiting for it to start, oh well - %s\n", pod.Name, err.Error())
+			log.Printf(
+				"Failed listing pod %s events while waiting for it to start, oh well - %s\n",
+				pod.Name,
+				err.Error())
 		}
 
 		// In case we encounter new events, we log them
@@ -1327,7 +1405,11 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 			// slicing and printing only newly encountered events
 			for _, newEvent := range podEvents[numberOfEventsEncountered:] {
 				if newEvent.Reason == "Pulling" {
-					fmt.Printf("pod %s is pulling an image from docker registry. this might take a while, please be patient...\n%s\n", pod.Name, newEvent.Message)
+					fmt.Printf(
+						"pod %s is pulling an image from docker registry. "+
+							"this might take a while, please be patient...\n%s\n",
+						pod.Name,
+						newEvent.Message)
 				} else {
 					fmt.Printf("pod %s: %s - %s\n", pod.Name, newEvent.Reason, newEvent.Message)
 				}
@@ -1366,18 +1448,27 @@ func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
 					)
 			}
 		}
-		return fmt.Errorf("Pod %s did not start after 15 freakin' minutes and found in phase %s%s", pod.Name, pod.Status.Phase, additionalErrorMessage)
+		return fmt.Errorf(
+			"Pod %s did not start after 15 freakin' minutes and found in phase %s%s",
+			pod.Name,
+			pod.Status.Phase,
+			additionalErrorMessage)
 	}
 }
 
-func waitForReplicationControllerPodToSchedule(client *k8sClient.Client, rc *v1.ReplicationController) (*v1.Pod, error) {
+func waitForReplicationControllerPodToSchedule(
+	client *k8sClient.Client,
+	rc *v1.ReplicationController) (*v1.Pod, error) {
 	log.Printf("searching for pods scheduled by replication controller %s\n", rc.Name)
 	for retries := 60; retries > 0; retries-- {
 
 		// Searching for the single pod scheduled by the rc
 		rcPods, err := client.ListPodsInfo(rc.Spec.Selector)
 		if err != nil {
-			return nil, fmt.Errorf("Failed searching for pods scheduled for rc %s - %s", rc.Name, err.Error())
+			return nil, fmt.Errorf(
+				"Failed searching for pods scheduled for rc %s - %s",
+				rc.Name,
+				err.Error())
 		}
 		if len(rcPods) == 0 {
 			log.Printf("Could not yet find pods associated with replication controller %s\n", rc.Name)
@@ -1389,7 +1480,9 @@ func waitForReplicationControllerPodToSchedule(client *k8sClient.Client, rc *v1.
 		time.Sleep(1 * time.Second)
 	}
 
-	return nil, fmt.Errorf("Failed finding pod scheduled for replication controller %s after waiting for 60 seconds", rc.Name)
+	return nil, fmt.Errorf(
+		"Failed finding pod scheduled for replication controller %s after waiting for 60 seconds",
+		rc.Name)
 
 }
 func deployK8SService(client *k8sClient.Client, svc *v1.Service, force bool) (*v1.Service, error) {
@@ -1409,7 +1502,7 @@ func deployK8SService(client *k8sClient.Client, svc *v1.Service, force bool) (*v
 
 func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPath string) error {
 	fmt.Printf("creating the application template using %s, icon:%s\n", templatePath, iconPath)
-	err, orcsServiceUrl := getOrcsServiceUrl(ctx)
+	orcsServiceUrl, err := getOrcsServiceUrl(ctx)
 	if err != nil {
 		return err
 	}
@@ -1437,7 +1530,9 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 		return fmt.Errorf("Failed posting new app template - %s", err.Error())
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
+	if resp.StatusCode != http.StatusOK &&
+		resp.StatusCode != http.StatusCreated &&
+		resp.StatusCode != http.StatusConflict {
 		return fmt.Errorf("Failed creating app template - %s", resp.Status)
 	}
 
@@ -1477,7 +1572,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 }
 
 func getSiteIdOrcs(ctx *cmd.DeployerContext, siteUrn string) (error, string) {
-	err, orcsUrl := getOrcsServiceUrl(ctx)
+	orcsUrl, err := getOrcsServiceUrl(ctx)
 	if err != nil {
 		return err, ""
 	}
@@ -1542,7 +1637,7 @@ func waitForServiceToBeStarted(ctx *cmd.DeployerContext, serviceEndpoint string)
 }
 
 func verifyOrcsServiceHasStarted(ctx *cmd.DeployerContext, serviceEndpoint string) error {
-	err, orcsServiceUrl := getOrcsServiceUrl(ctx)
+	orcsServiceUrl, err := getOrcsServiceUrl(ctx)
 	if err != nil {
 		return fmt.Errorf("Failed getting orcs service url - %s", err.Error())
 	}
@@ -1573,7 +1668,9 @@ func verifyOrcsServiceHasStarted(ctx *cmd.DeployerContext, serviceEndpoint strin
 	json.Unmarshal([]byte(all), &dat)
 	stateObj := dat["state"]
 	if stateObj == nil {
-		return fmt.Errorf("service state endpint for service %s, didn't contain a \"state\" field", serviceEndpoint)
+		return fmt.Errorf(
+			"service state endpint for service %s, didn't contain a \"state\" field",
+			serviceEndpoint)
 	}
 	state := stateObj.(string)
 	fmt.Println(state)

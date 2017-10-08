@@ -38,7 +38,13 @@ type deploySiteArgsBag struct {
 	verboseSiteLogging *bool
 }
 
+type deployServiceArgsBag struct {
+	cleanup            *bool
+}
+
 var deploySiteArgs *deploySiteArgsBag
+var deployMongoDsbArgs *deployServiceArgsBag
+var deployK8sPsbArgs *deployServiceArgsBag
 
 type UICommandAddDockerArtifactRegistry struct {
 	SiteId   string `json:"siteId"`
@@ -107,7 +113,7 @@ func deployPostgres(ctx *cmd.DeployerContext) (*v1.Service, error) {
 		return nil, err
 	}
 
-	fmt.Println("postgres deployed, verifying connectivity" + pgSvc.Spec.ClusterIP)
+	fmt.Println("postgres deployed, verifying connectivity " + pgSvc.Spec.ClusterIP)
 
 	// verifying postgres is started
 	pgService, err := ctx.Client.WaitForServiceToStart("nazdb", 100, 3*time.Second)
@@ -162,7 +168,7 @@ func deployOrcsService(
 	rcRequest, err := createReplicationControllerStruct(
 		"orcs",
 		ctx.DeploymentType,
-		"ocopea/orcs-k8s-runner",
+		"ocopea/orcs-k8s-runner:0.20",
 		"orcs")
 
 	if err != nil {
@@ -293,7 +299,73 @@ func deployOrcsService(
 
 }
 
-func deploySite(ctx *cmd.DeployerContext) error {
+
+func createNamespace(ctx *cmd.DeployerContext, namespaceName string, cleanup bool) error {
+	// In case cleanup is requested - dropping the entire site namespace
+	if cleanup {
+		fmt.Printf("Cleaning up namespace %s\n", namespaceName)
+		err := ctx.Client.DeleteNamespaceAndWaitForTermination(namespaceName, 30, 10 * time.Second)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Creating the k8s namespace we're going to use for deployment
+	_, err := ctx.Client.CreateNamespace(
+		&v1.Namespace{ObjectMeta: v1.ObjectMeta{Name: namespaceName}},
+		false)
+	if err != nil {
+		return errors.New("Failed creating namespace " + err.Error())
+	}
+	fmt.Printf("Namespace %s created successfuly\n", ctx.Namespace)
+	return nil
+
+}
+
+func deployMongoDsbCommandExecutor(ctx *cmd.DeployerContext) error {
+	fmt.Printf("Creating namespace %s for deploying mongodsb\n", ctx.Namespace)
+	err := createNamespace(ctx, ctx.Namespace, *deployMongoDsbArgs.cleanup)
+	if err != nil {
+		return errors.New("Failed creating namespace " + err.Error())
+	}
+
+	mongoDsbSvc, err := deployMongoDsbOrcs(ctx, true)
+	if (err != nil) {
+		return err
+	}
+
+	mongoDsbUrl, err := buildServiceRootUrl(mongoDsbSvc, ctx)
+	if (err != nil) {
+		return err
+	}
+
+	fmt.Printf("MongoDSB deployed at %s/dsb\n", mongoDsbUrl)
+
+	return nil
+}
+func deployK8sPsbCommandExecutor(ctx *cmd.DeployerContext) error {
+	fmt.Printf("Creating namespace %s for deploying k8spsb\n", ctx.Namespace)
+	err := createNamespace(ctx, ctx.Namespace, *deployK8sPsbArgs.cleanup)
+	if err != nil {
+		return errors.New("Failed creating namespace " + err.Error())
+	}
+
+	k8sPsbSvc, err := deployK8sPsbOrcs(ctx, true)
+	if (err != nil) {
+		return err
+	}
+
+	k8sPsbUrl, err := buildServiceRootUrl(k8sPsbSvc, ctx)
+	if (err != nil) {
+		return err
+	}
+
+	fmt.Printf("k8spsb deployed at %s/k8spsb-api\n", k8sPsbUrl)
+
+	return nil
+}
+
+func deploySiteCommandExecutor(ctx *cmd.DeployerContext) error {
 
 	// Validating command arguments
 
@@ -315,15 +387,11 @@ func deploySite(ctx *cmd.DeployerContext) error {
 		}
 	}
 
-	// Creating the k8s namespace we're going to use for deployment
 	fmt.Printf("Creating namespace %s for site %s\n", ctx.Namespace, *deploySiteArgs.siteName)
-	_, err := ctx.Client.CreateNamespace(
-		&v1.Namespace{ObjectMeta: v1.ObjectMeta{Name: ctx.Namespace}},
-		false)
+	err := createNamespace(ctx, ctx.Namespace, *deploySiteArgs.cleanup)
 	if err != nil {
 		return errors.New("Failed creating namespace " + err.Error())
 	}
-	fmt.Printf("Namespace %s created successfuly\n", ctx.Namespace)
 
 	// First we deploy an empty postgres used to store site data
 	// todo: allow attaching to existing postgres (e.g. RDS pg)
@@ -340,7 +408,7 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	}
 
 	// Building the root URL used by the orcs component
-	rootUrl, err := buildOrcsServiceRootUrl(orcsService, ctx)
+	rootUrl, err := buildServiceRootUrl(orcsService, ctx)
 	if err != nil {
 		return err
 	}
@@ -398,15 +466,32 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	}
 
 	// Deploying Kubernetes PSB
-	err = deployK8sPsbOrcs(ctx)
+	k8sPsbSvc, err := deployK8sPsbOrcs(ctx, false)
 	if err != nil {
 		return err
 	}
 	// Deploying mongo DSB
-	err = deployMongoDsbOrcs(ctx)
+	mongoDsbSvc, err := deployMongoDsbOrcs(ctx, false)
 	if err != nil {
 		return err
 	}
+
+	// Adding the dsb to the site
+	err = registerDsbOrcs(ctx, "mongo-k8s-dsb", "http://" + mongoDsbSvc.Spec.ClusterIP + "/dsb")
+	if err != nil {
+		return err
+	}
+
+	err = registerPsbOrcs(ctx, "k8spsb", "http://" + k8sPsbSvc.Spec.ClusterIP + "/k8spsb-api")
+	if err != nil {
+		return err
+	}
+
+	// Adding the docker hub as docker artifact registry
+	err = addDockerArtifactRegistryOrcs(ctx)
+
+
+
 	/*
 		err = deployK8sDsbOrcs(ctx)
 		if (err != nil) {
@@ -423,13 +508,13 @@ func deploySite(ctx *cmd.DeployerContext) error {
 	return nil
 }
 
-func buildOrcsServiceRootUrl(orcsService *v1.Service, ctx *cmd.DeployerContext) (string, error) {
-	if orcsService.Spec.Type == v1.ServiceTypeLoadBalancer {
-		return "http://" + extractLoadBalancerAddress(orcsService.Status.LoadBalancer), nil
-	} else if orcsService.Spec.Type == v1.ServiceTypeNodePort {
-		return "http://" + ctx.ClusterIp + ":" + strconv.Itoa(orcsService.Spec.Ports[0].NodePort), nil
+func buildServiceRootUrl(svc *v1.Service, ctx *cmd.DeployerContext) (string, error) {
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		return "http://" + extractLoadBalancerAddress(svc.Status.LoadBalancer), nil
+	} else if svc.Spec.Type == v1.ServiceTypeNodePort {
+		return "http://" + ctx.ClusterIp + ":" + strconv.Itoa(svc.Spec.Ports[0].NodePort), nil
 	} else {
-		return "", fmt.Errorf("Unsupported service type returned for orcs service %s\n", orcsService.Spec.Type)
+		return "", fmt.Errorf("Unsupported service type returned for orcs service %s\n", svc.Spec.Type)
 	}
 
 }
@@ -509,7 +594,7 @@ func getOrcsServiceUrl(ctx *cmd.DeployerContext) (string, error) {
 		return "", fmt.Errorf("Failed locating orcs service service - %s", err.Error())
 	}
 
-	return buildOrcsServiceRootUrl(orcsService, ctx)
+	return buildServiceRootUrl(orcsService, ctx)
 }
 
 func buildHubServiceConfiguration(
@@ -753,19 +838,14 @@ func buildSiteServiceConfiguration(
 	}
 }
 
-func deployK8sPsbOrcs(ctx *cmd.DeployerContext) error {
+func deployK8sPsbOrcs(ctx *cmd.DeployerContext, exposePublic bool) (*v1.Service, error) {
 	fmt.Println("Deploying k8s-psb")
 	// Verifying site is registered
-	err, siteId := getSiteIdOrcs(ctx, "site")
-	if err != nil {
-		return err
-	}
-
 	svc, err := deployService(
 		ctx.Client,
 		"k8spsb",
 		ctx.DeploymentType,
-		false,
+		exposePublic,
 		true,
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
@@ -780,37 +860,16 @@ func deployK8sPsbOrcs(ctx *cmd.DeployerContext) error {
 		ctx.ClusterIp)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	serviceUrl := "http://" + svc.Spec.ClusterIP + "/k8spsb-api"
 	fmt.Printf("k8spsb deployed on ip %s\n", serviceUrl)
 
-	// Registering PSB on site
-	fmt.Println("Registering cf-psb on site")
-	err = postCommandOrcs(
-		ctx,
-		"hub-web",
-		"add-psb",
-		UICommandAddPsb{
-			PsbUrn: "k8spsb",
-			PsbUrl: serviceUrl,
-			SiteId: siteId,
-		},
-		http.StatusNoContent)
-
-	if err != nil {
-		return err
-	}
-	fmt.Println("cf-psb registered successfully on site")
-
-	// Adding docker artifact registry
-	err = addDockerArtifactRegistryOrcs(ctx, siteId)
-
-	return err
+	return svc, err
 }
 
-func deployMongoDsbOrcs(ctx *cmd.DeployerContext) error {
+func deployMongoDsbOrcs(ctx *cmd.DeployerContext, exposePublic bool) (*v1.Service, error) {
 
 	fmt.Println("Deploying mongo-dsb")
 	// Verifying site is registered on hub
@@ -818,7 +877,7 @@ func deployMongoDsbOrcs(ctx *cmd.DeployerContext) error {
 		ctx.Client,
 		"mongo-k8s-dsb",
 		ctx.DeploymentType,
-		false,
+		exposePublic,
 		true,
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
@@ -836,17 +895,11 @@ func deployMongoDsbOrcs(ctx *cmd.DeployerContext) error {
 	)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 	fmt.Println("mongo-dsb has been deployed successfully")
 
-	// Adding the dsb to the site
-	err = registerDsbOrcs(ctx, "mongo-k8s-dsb", "http://"+svc.Spec.ClusterIP+"/dsb")
-	if err != nil {
-		return err
-	}
-
-	return err
+	return svc, nil
 }
 
 func deployK8sDsbOrcs(ctx *cmd.DeployerContext) error {
@@ -948,6 +1001,35 @@ func registerDsbOrcs(ctx *cmd.DeployerContext, dsbUrn string, dsbUrl string) err
 
 }
 
+func registerPsbOrcs(ctx *cmd.DeployerContext, psbUrn string, psbUrl string) error {
+	fmt.Printf("Registering PSB %s on site using url %s\n", psbUrn, psbUrl)
+
+	err, siteId := getSiteIdOrcs(ctx, "site")
+	if err != nil {
+		return err
+	}
+	// Registering PSB on site
+	fmt.Println("Registering cf-psb on site")
+	err = postCommandOrcs(
+		ctx,
+		"hub-web",
+		"add-psb",
+		UICommandAddPsb{
+			PsbUrn: psbUrn,
+			PsbUrl: psbUrl,
+			SiteId: siteId,
+		},
+		http.StatusNoContent)
+
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s registered successfully on site\n", psbUrn)
+
+	return err
+
+}
+
 func registerCrbOrcs(ctx *cmd.DeployerContext, crbUrn string, crbUrl string) error {
 	fmt.Printf("Registering crb %s on site using url %s\n", crbUrn, crbUrl)
 	err, siteId := getSiteIdOrcs(ctx, "site")
@@ -1019,10 +1101,16 @@ func postCommandOrcs(
 	return nil
 }
 
-func addDockerArtifactRegistryOrcs(ctx *cmd.DeployerContext, siteId string) error {
+func addDockerArtifactRegistryOrcs(ctx *cmd.DeployerContext) error {
 
 	fmt.Println("configuring the docker hub as the sites default artifact registry")
-	err := postCommandOrcs(
+
+	err, siteId := getSiteIdOrcs(ctx, "site")
+	if err != nil {
+		return err
+	}
+
+	err = postCommandOrcs(
 		ctx,
 		"hub-web",
 		"add-docker-artifact-registry",
@@ -1042,7 +1130,7 @@ func addDockerArtifactRegistryOrcs(ctx *cmd.DeployerContext, siteId string) erro
 func defineDeploySiteCommand() *cmd.DeployerCommand {
 	cmd := &cmd.DeployerCommand{
 		Name:     "deploy-site",
-		Executor: deploySite,
+		Executor: deploySiteCommandExecutor,
 	}
 
 	cmd.FlagSet = flag.NewFlagSet(cmd.Name, flag.ExitOnError)
@@ -1051,6 +1139,33 @@ func defineDeploySiteCommand() *cmd.DeployerCommand {
 		siteName:           cmd.FlagSet.String("site-name", "", "Site Name"),
 		cleanup:            cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
 		verboseSiteLogging: cmd.FlagSet.Bool("verbose-site-logging", false, "Make the site logging verbose"),
+	}
+	return cmd
+}
+
+func defineDeployMongoDsbCommand() *cmd.DeployerCommand {
+	cmd := &cmd.DeployerCommand{
+		Name:     "deploy-mongodsb",
+		Executor: deployMongoDsbCommandExecutor,
+	}
+
+	cmd.FlagSet = flag.NewFlagSet(cmd.Name, flag.ExitOnError)
+
+	deployMongoDsbArgs = &deployServiceArgsBag{
+		cleanup: cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
+	}
+	return cmd
+}
+func defineDeployK8sPsbCommand() *cmd.DeployerCommand {
+	cmd := &cmd.DeployerCommand{
+		Name:     "deploy-k8spsb",
+		Executor: deployK8sPsbCommandExecutor,
+	}
+
+	cmd.FlagSet = flag.NewFlagSet(cmd.Name, flag.ExitOnError)
+
+	deployK8sPsbArgs = &deployServiceArgsBag{
+		cleanup: cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
 	}
 	return cmd
 }
@@ -1068,6 +1183,8 @@ func main() {
 	// define all the supported commands
 	deployerCommands := []*cmd.DeployerCommand{
 		defineDeploySiteCommand(),
+		defineDeployK8sPsbCommand(),
+		defineDeployMongoDsbCommand(),
 	}
 
 	// Executing the command selected by the user or show prompt
@@ -1276,7 +1393,7 @@ func deployService(
 	}
 
 	if publicRoute != "" {
-		fmt.Printf("for service %s - naz route - %s\n", serviceName, publicRoute)
+		log.Printf("for service %s - naz route - %s\n", serviceName, publicRoute)
 		rcRequest.Spec.Template.Spec.Containers[0].Env =
 			append(
 				rcRequest.Spec.Template.Spec.Containers[0].Env,

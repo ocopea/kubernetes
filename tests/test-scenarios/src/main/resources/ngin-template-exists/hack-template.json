@@ -1,0 +1,36 @@
+{
+  "id":"${appTemplateId}",
+  "name": "hackathon",
+  "version": "1.0",
+  "description": "Hackathon Registration App",
+  "appServiceTemplates": [
+    {
+      "appServiceName": "hackathon-svc",
+      "psbType": "ShpanPaaS",
+      "imageName": "hackathon",
+      "imageType": "java",
+      "imageVersion": "1.0",
+      "environmentVariables": {},
+      "dependencies": [
+        {
+          "type": "DATABASE",
+          "name": "hackathon-db",
+          "description": "Hackathon ideas DB",
+          "img": "/hub-web-api/images/dsb-protocol/postgres"
+        },
+        {
+          "type": "OBJECTSTORE",
+          "name": "hack-docs",
+          "description": "Hackathon document store",
+          "img": "/hub-web-api/images/dsb-protocol/s3"
+        }
+      ],
+      "exposedPorts": [8080],
+      "httpPort": 8080,
+      "entryPointUrl": "hackathon-api/html/nui/index.html",
+      "img": "/hub-web-api/images/image-type/java"
+    }
+  ],
+  "entryPointServiceName": "hackathon-svc",
+  "img": "/hub-web-api/images/app-template/${appTemplateId}"
+}

@@ -66,6 +66,15 @@ Create a fork of the project into your own reposity.
 Make all your necessary changes and create a pull request with a description on what was added or removed and details 
 explaining the changes in lines of code. If approved, project owners will merge it.
 
+## Quality
+
+Every pull request must pass the full tests of the repository.
+1) All go code must be formatted with go fmt
+2) All repository tests must pass. See more information regarding how to run the tests 
+[here](https://github.com/ocopea/kubernetes/tree/master/tests)
+
+
+
 Licensing
 ---------
 **{code} does not provide legal guidance on which open source license should be used in projects. 

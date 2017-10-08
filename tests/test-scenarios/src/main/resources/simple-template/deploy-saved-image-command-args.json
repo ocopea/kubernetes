@@ -1,0 +1,23 @@
+{
+  "appInstanceName": "${appInstanceName}",
+  "savedImageId": "${savedImageId}",
+  "siteId": "${siteId}",
+  "deploymentPlan": {
+    "appServices": {
+      "${svcName}": {
+        "enabled": true,
+        "space": "${space}",
+        "artifactRegistryName": "${artifactRegistryName}",
+        "imageVersion": "${svcVersion}"
+      }
+    },
+    "dataServices": {
+      "${dataServiceName}": {
+        "dsbURN": "${dsbUrn}",
+        "enabled": true,
+        "dsbPlan": "${dsbPlan}",
+        "dsbProtocol": "${dsbProtocol}"
+      }
+    }
+  }
+}

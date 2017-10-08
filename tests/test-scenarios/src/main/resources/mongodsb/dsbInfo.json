@@ -1,0 +1,23 @@
+{
+  "description": "mongodb DSB for kubernetes",
+  "name": "mongo-k8s-dsb",
+  "plans": [
+    {
+      "copyProtocols": [
+        {
+          "copyProtocol": "ShpanRest",
+          "copyProtocolVersion": "1.0"
+        }
+      ],
+      "description": "Standard mongodb container",
+      "id": "standard",
+      "name": "standard",
+      "protocols": [
+        {
+          "protocol": "mongodb"
+        }
+      ]
+    }
+  ],
+  "type": "datasoruce"
+}

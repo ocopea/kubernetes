@@ -1,0 +1,6 @@
+{
+  "instanceId":"${serviceInstanceId}",
+  "instanceSettings": {
+    "plan": "${dsbPlan}"
+  }
+}

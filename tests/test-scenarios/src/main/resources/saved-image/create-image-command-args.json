@@ -1,0 +1,6 @@
+{
+    "name":"${image.name}",
+    "appInstanceId":"${image.appInstanceId}",
+    "tags":${image.tags},
+    "comment":"${image.comment}"
+}

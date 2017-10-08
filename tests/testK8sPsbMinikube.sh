@@ -1,0 +1,1 @@
+$(kubectl describe svc k8spsb --namespace=testing | grep NodePort: | awk '{print $3}' | awk -F'/' '{print "java -jar k8spsb-tester/target/k8spsb-tester.jar http://minikubeip:"$1"/k8spsb-api"}' | sed "s/minikubeip/$(minikube ip)/g")

@@ -1,0 +1,7 @@
+{
+  "name": "k8s-psb",
+  "version": "0.1",
+  "description": "Ocopea Kubernetes Paas Broker",
+  "type": "k8s",
+  "appServiceIdMaxLength": 24
+}

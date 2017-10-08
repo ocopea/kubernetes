@@ -103,10 +103,10 @@ type requestContext struct {
 }
 
 var gPSBInfo = psbInfo{
-	Name:                  "k8s-mini",
+	Name:                  "k8s-psb",
 	Version:               "0.1",
 	Type:                  "k8s",
-	Description:           "K8S Mini PaaS",
+	Description:           "Ocopea Kubernetes Paas Broker",
 	AppServiceIdMaxLength: 24,
 }
 var kClient *kubernetesClient.Client

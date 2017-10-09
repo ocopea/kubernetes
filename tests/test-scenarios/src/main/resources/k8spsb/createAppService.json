@@ -1,0 +1,16 @@
+{
+  "appServiceId": "app1",
+  "space": "default",
+  "imageName": "tutum/hello-world",
+  "imageVersion": "latest",
+  "environmentVariables": {},
+  "artifactRegistryType": "dockerRegistry",
+  "artifactRegistryParameters": {
+    "name": "docker-hub",
+    "url": "https://registry.hub.docker.com"
+  },
+  "exposedPorts": [
+    80
+  ],
+  "httpPort": 80
+}

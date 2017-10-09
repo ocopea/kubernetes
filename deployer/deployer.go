@@ -39,7 +39,7 @@ type deploySiteArgsBag struct {
 }
 
 type deployServiceArgsBag struct {
-	cleanup            *bool
+	cleanup *bool
 }
 
 var deploySiteArgs *deploySiteArgsBag
@@ -266,7 +266,7 @@ func deployOrcsService(
 	}
 
 	fmt.Println("Deploying the orcs replication controller")
-	_, err = deployK8SReplicationController(ctx.Client, "orcs", rcRequest, true)
+	_, err = ctx.Client.DeployReplicationController("orcs", rcRequest, true)
 	if err != nil {
 		return nil, fmt.Errorf("Failed creating replication controller for orcs - %s", err.Error())
 	}
@@ -299,12 +299,11 @@ func deployOrcsService(
 
 }
 
-
 func createNamespace(ctx *cmd.DeployerContext, namespaceName string, cleanup bool) error {
 	// In case cleanup is requested - dropping the entire site namespace
 	if cleanup {
 		fmt.Printf("Cleaning up namespace %s\n", namespaceName)
-		err := ctx.Client.DeleteNamespaceAndWaitForTermination(namespaceName, 30, 10 * time.Second)
+		err := ctx.Client.DeleteNamespaceAndWaitForTermination(namespaceName, 30, 10*time.Second)
 		if err != nil {
 			return err
 		}
@@ -313,7 +312,7 @@ func createNamespace(ctx *cmd.DeployerContext, namespaceName string, cleanup boo
 	// Creating the k8s namespace we're going to use for deployment
 	_, err := ctx.Client.CreateNamespace(
 		&v1.Namespace{ObjectMeta: v1.ObjectMeta{Name: namespaceName}},
-		false)
+		true)
 	if err != nil {
 		return errors.New("Failed creating namespace " + err.Error())
 	}
@@ -330,12 +329,12 @@ func deployMongoDsbCommandExecutor(ctx *cmd.DeployerContext) error {
 	}
 
 	mongoDsbSvc, err := deployMongoDsbOrcs(ctx, true)
-	if (err != nil) {
+	if err != nil {
 		return err
 	}
 
 	mongoDsbUrl, err := buildServiceRootUrl(mongoDsbSvc, ctx)
-	if (err != nil) {
+	if err != nil {
 		return err
 	}
 
@@ -351,12 +350,12 @@ func deployK8sPsbCommandExecutor(ctx *cmd.DeployerContext) error {
 	}
 
 	k8sPsbSvc, err := deployK8sPsbOrcs(ctx, true)
-	if (err != nil) {
+	if err != nil {
 		return err
 	}
 
 	k8sPsbUrl, err := buildServiceRootUrl(k8sPsbSvc, ctx)
-	if (err != nil) {
+	if err != nil {
 		return err
 	}
 
@@ -477,20 +476,18 @@ func deploySiteCommandExecutor(ctx *cmd.DeployerContext) error {
 	}
 
 	// Adding the dsb to the site
-	err = registerDsbOrcs(ctx, "mongo-k8s-dsb", "http://" + mongoDsbSvc.Spec.ClusterIP + "/dsb")
+	err = registerDsbOrcs(ctx, "mongo-k8s-dsb", "http://"+mongoDsbSvc.Spec.ClusterIP+"/dsb")
 	if err != nil {
 		return err
 	}
 
-	err = registerPsbOrcs(ctx, "k8spsb", "http://" + k8sPsbSvc.Spec.ClusterIP + "/k8spsb-api")
+	err = registerPsbOrcs(ctx, "k8spsb", "http://"+k8sPsbSvc.Spec.ClusterIP+"/k8spsb-api")
 	if err != nil {
 		return err
 	}
 
 	// Adding the docker hub as docker artifact registry
 	err = addDockerArtifactRegistryOrcs(ctx)
-
-
 
 	/*
 		err = deployK8sDsbOrcs(ctx)
@@ -1417,7 +1414,7 @@ func deployService(
 
 	}
 
-	_, err = deployK8SReplicationController(client, serviceName, rcRequest, force)
+	_, err = client.DeployReplicationController(serviceName, rcRequest, force)
 	if err != nil {
 		return nil, fmt.Errorf("Failed creating replication controller for %s - %s", serviceName, err.Error())
 	}
@@ -1426,182 +1423,6 @@ func deployService(
 
 }
 
-func deployK8SReplicationController(
-	client *k8sClient.Client,
-	serviceName string,
-	rc *v1.ReplicationController,
-	force bool) (*v1.ReplicationController, error) {
-	rc, err := client.CreateReplicationController(rc, force)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"Failed creating k8s replication controller for %s - %s",
-			serviceName,
-			err.Error())
-	}
-	log.Printf("%s replication controller has been deployed successfully\n", rc.Name)
-
-	// Now waiting for replication controller to schedule a single replication
-	for retries := 60; rc.Status.Replicas == 0 && retries > 0; retries-- {
-		rc, err = client.GetReplicationControllerInfo(rc.Name)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"Failed getting k8s replication controller for %s - %s",
-				serviceName,
-				err.Error())
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	if rc.Status.Replicas == 0 {
-		return nil, fmt.Errorf(
-			"Replication controller %s failed creating replicas after waiting for 60 seconds",
-			rc.Name)
-	}
-
-	log.Printf(
-		"%s replication controller has been deployed successfully and replicas already been observed\n",
-		rc.Name)
-
-	// Now we want to see that we have a pod scheduled by the rc
-	rcPod, err := waitForReplicationControllerPodToSchedule(client, rc)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Printf("pod %s for replication controller %s has been scheduled and observed\n", rcPod.Name, rc.Name)
-
-	// Now we're waiting to the scheduled pod to actually start with a running container
-	err = waitForPodToBeRunning(client, rcPod)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("pod %s for replication controller %s has been started successfuly\n", rcPod.Name, rc.Name)
-
-	return rc, nil
-
-}
-
-func waitForPodToBeRunning(client *k8sClient.Client, pod *v1.Pod) error {
-	var err error = nil
-	var numberOfEventsEncountered int = 0
-	// now we want to see that the stupid pod is really starting!
-	for retries := 900; pod.Status.Phase != "Running" && retries > 0; retries-- {
-		pod, err = client.GetPodInfo(pod.Name)
-		if err != nil {
-			return fmt.Errorf(
-				"Failed getting pod %s while waiting for it to be a sweetheart and run - %s",
-				pod.Name,
-				err.Error())
-		}
-		if pod.Status.ContainerStatuses[0].State.Waiting != nil &&
-			pod.Status.ContainerStatuses[0].State.Waiting.Reason == "ErrImagePull" {
-			return fmt.Errorf(
-				"Pod %s failed to start. failed pulling image %s - %s",
-				pod.Name,
-				pod.Status.ContainerStatuses[0].Image,
-				pod.Status.ContainerStatuses[0].State.Waiting.Message)
-
-		} else if pod.Status.ContainerStatuses[0].State.Terminated != nil {
-			break
-		}
-
-		// Getting pod events in order to print to console progress
-		podEvents, err := client.ListEntityEvents(pod.UID)
-
-		// In case we have an error when collecting events, skip it, we this is for logging only
-		if err != nil {
-			log.Printf(
-				"Failed listing pod %s events while waiting for it to start, oh well - %s\n",
-				pod.Name,
-				err.Error())
-		}
-
-		// In case we encounter new events, we log them
-		if len(podEvents) > numberOfEventsEncountered {
-
-			// slicing and printing only newly encountered events
-			for _, newEvent := range podEvents[numberOfEventsEncountered:] {
-				if newEvent.Reason == "Pulling" {
-					fmt.Printf(
-						"pod %s is pulling an image from docker registry. "+
-							"this might take a while, please be patient...\n%s\n",
-						pod.Name,
-						newEvent.Message)
-				} else {
-					fmt.Printf("pod %s: %s - %s\n", pod.Name, newEvent.Reason, newEvent.Message)
-				}
-			}
-
-			// Updating events already printed to log
-			numberOfEventsEncountered = len(podEvents)
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-	if pod.Status.Phase == "Running" {
-		time.Sleep(3 * time.Second)
-		log.Printf("pod %s is now running, yey\n", pod.Name)
-		return nil
-	} else {
-
-		additionalErrorMessage := ""
-		// Enriching error message
-		if pod.Status.ContainerStatuses != nil &&
-			len(pod.Status.ContainerStatuses) > 0 {
-			if pod.Status.ContainerStatuses[0].State.Waiting != nil {
-				additionalErrorMessage +=
-					fmt.Sprintf(
-						". container still waiting. reason:%s; message:%s",
-						pod.Status.ContainerStatuses[0].State.Waiting.Reason,
-						pod.Status.ContainerStatuses[0].State.Waiting.Message)
-			} else if pod.Status.ContainerStatuses[0].State.Terminated != nil {
-				additionalErrorMessage +=
-					fmt.Sprintf(
-						". container terminated. reason:%s; message:%s; exit code:%d",
-						pod.Status.ContainerStatuses[0].State.Terminated.Reason,
-						pod.Status.ContainerStatuses[0].State.Terminated.Message,
-						pod.Status.ContainerStatuses[0].State.Terminated.ExitCode,
-					)
-			}
-		}
-		return fmt.Errorf(
-			"Pod %s did not start after 15 freakin' minutes and found in phase %s%s",
-			pod.Name,
-			pod.Status.Phase,
-			additionalErrorMessage)
-	}
-}
-
-func waitForReplicationControllerPodToSchedule(
-	client *k8sClient.Client,
-	rc *v1.ReplicationController) (*v1.Pod, error) {
-	log.Printf("searching for pods scheduled by replication controller %s\n", rc.Name)
-	for retries := 60; retries > 0; retries-- {
-
-		// Searching for the single pod scheduled by the rc
-		rcPods, err := client.ListPodsInfo(rc.Spec.Selector)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"Failed searching for pods scheduled for rc %s - %s",
-				rc.Name,
-				err.Error())
-		}
-		if len(rcPods) == 0 {
-			log.Printf("Could not yet find pods associated with replication controller %s\n", rc.Name)
-		} else {
-			thePod := rcPods[0]
-			log.Printf("Found Pod %s, scheduled for rc %s\n", thePod.Name, rc.Name)
-			return thePod, nil
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	return nil, fmt.Errorf(
-		"Failed finding pod scheduled for replication controller %s after waiting for 60 seconds",
-		rc.Name)
-
-}
 func deployK8SService(client *k8sClient.Client, svc *v1.Service, force bool) (*v1.Service, error) {
 	svc, err := client.CreateService(svc, force)
 	if err != nil {

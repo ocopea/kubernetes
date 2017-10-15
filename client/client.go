@@ -394,12 +394,6 @@ func (c *Client) GetPodLogs(podName string) ([]byte, error) {
 	return content, nil
 }
 
-type LogMessageConsumer interface {
-	Consume(message string)
-}
-
-type CloseHandle func()
-
 func (c *Client) FollowPodLogs(podName string, consumerChannel chan string) (CloseHandle, error) {
 	httpMethod := "GET"
 	resourceName := "pods/" + podName + "/log?follow=trye"
@@ -511,10 +505,10 @@ func (c *Client) DeleteNamespace(nsName string) error {
 }
 
 func (c *Client) DeleteReplicationController(rcName string) error {
-	return c.deleteEntity("replicationcontrollers/" + rcName)
+	return c.deleteEntity("namespaces/"+c.Namespace+"/"+"replicationcontrollers/" + rcName)
 }
 func (c *Client) DeleteService(serviceName string) error {
-	return c.deleteEntity("services/" + serviceName)
+	return c.deleteEntity("namespaces/"+c.Namespace+"/"+"services/" + serviceName)
 }
 
 func (c *Client) deleteEntity(relativeUrl string) error {
@@ -569,10 +563,6 @@ func (c *Client) doHttpNoNS(method string, resource string, r io.Reader) (*http.
 	}
 	log.Printf("%s on %s returned %d\n", method, resource, response.StatusCode)
 	return response, err
-}
-
-func (c *Client) Decode(v interface{}) error {
-	return nil
 }
 
 func (c *Client) RunOneOffTask(name string, containerName string, additionalVars []v1.EnvVar) error {

@@ -23,6 +23,10 @@ import (
 
 var upgrader = websocket.Upgrader{} // use default options
 
+var parseRequestVars = func(r *http.Request) map[string]string {
+	return mux.Vars(r)
+}
+
 type PSBSpaceDTO struct {
 	Name       string            `json:"name"`
 	Properties map[string]string `json:"properties"`
@@ -102,14 +106,14 @@ type requestContext struct {
 	done   chan bool
 }
 
-var gPSBInfo = psbInfo{
+var gPsbInfo = psbInfo{
 	Name:                  "k8s-psb",
 	Version:               "0.1",
 	Type:                  "k8s",
 	Description:           "Ocopea Kubernetes Paas Broker",
 	AppServiceIdMaxLength: 24,
 }
-var kClient *kubernetesClient.Client
+var kClient kubernetesClient.ClientInterface
 var deploymentType string
 var gLocalClusterIp string
 var gInClusterServiceAddr string
@@ -118,19 +122,19 @@ func (e deployError) Error() string {
 	return e.message
 }
 
-func handlePSBInfo(w http.ResponseWriter, r *http.Request) {
+func handlePsbInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
-		enc.Encode(gPSBInfo)
+		enc.Encode(gPsbInfo)
 	} else {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
 func handleAppServiceInfo(w http.ResponseWriter, r *http.Request) *deployError {
 	if r.Method == "GET" {
-		vars := mux.Vars(r)
+		vars := parseRequestVars(r)
 
 		w.Header().Set("Content-Type", "application/json")
 		appUniqueName := vars["appServiceId"]
@@ -168,7 +172,10 @@ func handleAppServiceInfo(w http.ResponseWriter, r *http.Request) *deployError {
 					serviceURL = "http://" + gLocalClusterIp + ":" + strconv.Itoa(svc.Spec.Ports[0].NodePort)
 				}
 				if serviceURL == "" {
-					fmt.Printf("Service %s is shit and has no URL\n", svc.Name)
+					return &deployError{
+						httpStatusCode: http.StatusInternalServerError,
+						message:        fmt.Sprintf("Service %s has no URL\n", svc.Name),
+					}
 				}
 			}
 
@@ -184,7 +191,7 @@ func handleAppServiceInfo(w http.ResponseWriter, r *http.Request) *deployError {
 			enc.Encode(info)
 		}
 	} else if r.Method == "DELETE" {
-		vars := mux.Vars(r)
+		vars := parseRequestVars(r)
 		w.Header().Set("Content-Type", "application/json")
 		appUniqueName := vars["appServiceId"]
 		if appUniqueName == "" {
@@ -218,6 +225,11 @@ func handleAppServiceInfo(w http.ResponseWriter, r *http.Request) *deployError {
 				message:        fmt.Sprintf("Failed deleting replication service %s", appUniqueName),
 			}
 		}
+
+		w.WriteHeader(200)
+		io.WriteString(w, "{\"status\":0,\"message\":\"Oh Yeah!\"}")
+		fmt.Printf("App Service %s deleted successfully\n", appUniqueName)
+
 	} else {
 		return &deployError{
 			httpStatusCode: http.StatusUnsupportedMediaType,
@@ -230,7 +242,7 @@ func handleAppServiceLogs(w http.ResponseWriter, r *http.Request) *deployError {
 	if r.Method == "GET" {
 
 		w.Header().Set("Content-Type", "application/json")
-		//vars := mux.Vars(r)
+		//vars := parseRequestVars(r)
 		//appUniqueName := vars["appServiceId"]
 
 		enc := json.NewEncoder(w)
@@ -261,7 +273,7 @@ func handleAppServiceLogsData(w http.ResponseWriter, r *http.Request) *deployErr
 	messagesChannel := make(chan string, 50)
 	wsClosedChannel := make(chan bool, 1)
 
-	vars := mux.Vars(r)
+	vars := parseRequestVars(r)
 	appUniqueName := vars["appServiceId"]
 	if appUniqueName == "" {
 		return &deployError{
@@ -729,7 +741,7 @@ func main() {
 
 	router := mux.NewRouter().StrictSlash(true)
 
-	router.HandleFunc("/k8spsb-api/psb/info", handlePSBInfo)
+	router.HandleFunc("/k8spsb-api/psb/info", handlePsbInfo)
 	router.HandleFunc("/k8spsb-api/psb/app-services", deployAppHandler)
 	router.HandleFunc("/k8spsb-api/psb/app-services/{space}/{appServiceId}", appServiceInfoHandler)
 	router.HandleFunc("/k8spsb-api/psb/app-services/{space}/{appServiceId}/logs", appServiceLogsHandler)

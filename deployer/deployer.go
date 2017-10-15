@@ -442,16 +442,6 @@ func deploySiteCommandExecutor(ctx *cmd.DeployerContext) error {
 		return fmt.Errorf("Failed creating application template - %s", err.Error())
 	}
 
-	// Creating the wordpress app template
-	err = createAppTemplateOrcs(
-		ctx,
-		"wordpress-template.json",
-		"wordpress.png",
-	)
-	if err != nil {
-		return fmt.Errorf("Failed creating application template - %s", err.Error())
-	}
-
 	// Registering the default crb
 	err = registerCrbOrcs(
 		ctx,

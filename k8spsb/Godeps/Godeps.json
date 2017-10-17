@@ -1,0 +1,44 @@
+{
+	"ImportPath": "ocopea/kubernetes/k8spsb",
+	"GoVersion": "go1.8",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/gorilla/context",
+			"Rev": "215affda49addc4c8ef7e2534915df2c8c35c6cd"
+		},
+		{
+			"ImportPath": "github.com/gorilla/mux",
+			"Rev": "8096f47503459bcc74d1f4c487b7e6e42e5746b5"
+		},
+		{
+			"ImportPath": "github.com/gorilla/websocket",
+			"Comment": "v1.2.0-6-ga69d9f6",
+			"Rev": "a69d9f6de432e2c6b296a947d8a5ee88f68522cf"
+		},
+		{
+			"ImportPath": "ocopea/kubernetes/client",
+			"Rev": "13c1231a8447ce1d45fcb0ff482dd29734a3e1bc"
+		},
+		{
+			"ImportPath": "ocopea/kubernetes/client/inf",
+			"Rev": "13c1231a8447ce1d45fcb0ff482dd29734a3e1bc"
+		},
+		{
+			"ImportPath": "ocopea/kubernetes/client/resource",
+			"Rev": "13c1231a8447ce1d45fcb0ff482dd29734a3e1bc"
+		},
+		{
+			"ImportPath": "ocopea/kubernetes/client/types",
+			"Rev": "13c1231a8447ce1d45fcb0ff482dd29734a3e1bc"
+		},
+		{
+			"ImportPath": "ocopea/kubernetes/client/unversioned",
+			"Rev": "13c1231a8447ce1d45fcb0ff482dd29734a3e1bc"
+		},
+		{
+			"ImportPath": "ocopea/kubernetes/client/v1",
+			"Rev": "13c1231a8447ce1d45fcb0ff482dd29734a3e1bc"
+		}
+	]
+}

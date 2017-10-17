@@ -27,7 +27,7 @@ deploying ocopea site on your kubernetes cluster is as simple as running one com
 For simplicity, we recommend using kubectl proxy instead of passing api info for ocopea
 
 ```
-$ $ kubectl proxy -p 8080
+$ kubectl proxy -p 8080
 ```
 
 When deploying to an on premises cluster(local deployment), pass the kubernetes cluster ip as the *local-cluster-ip*
@@ -53,7 +53,7 @@ minikube deployment is no different than other local clusters.
 
 ```
 $ minikube start
-$ $ kubectl proxy -p 8080
+$ kubectl proxy -p 8080
 $ cd deployer
 $ go run deployer.go deploy-site -local-cluster-ip=$(minikube ip) 
 ```

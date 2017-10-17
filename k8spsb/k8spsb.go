@@ -686,9 +686,7 @@ func handleServerError(w http.ResponseWriter, err *deployError, r *http.Request)
 }
 
 func main() {
-	//runtime.GOMAXPROCS(runtime.NumCPU())
-	log.Println("hi, I'm here")
-	fmt.Println("Yo, here dude!")
+	fmt.Println("starting k8spsb")
 
 	// Parsing flags
 	k8sURL := flag.String("url", "https://kubernetes:443", "K8S remote api url")
@@ -753,14 +751,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//defer l.Close()
-	//l = netutil.LimitListener(l, 10)
-	//err = http.Serve(l, nil)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-
-	//http.ListenAndServe(":8000", nil)
 }
 
 func extractLoadBalancerAddress(loadBalancerStatus v1.LoadBalancerStatus) string {

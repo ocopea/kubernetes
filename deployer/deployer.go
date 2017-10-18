@@ -181,7 +181,7 @@ func deployOrcsService(
 			rcRequest.Spec.Template.Spec.Containers[0].Env,
 			v1.EnvVar{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			v1.EnvVar{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			v1.EnvVar{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace})
+			v1.EnvVar{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace})
 
 	rootConfNode := createOrcsServicesConfiguration(
 		pgService,
@@ -837,7 +837,7 @@ func deployK8sPsbOrcs(ctx *cmd.DeployerContext, exposePublic bool) (*v1.Service,
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 		},
 		80,
 		8080,
@@ -869,7 +869,7 @@ func deployMongoDsbOrcs(ctx *cmd.DeployerContext, exposePublic bool) (*v1.Servic
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 			{Name: "PORT", Value: "8080"},
 			{Name: "HOST", Value: "0.0.0.0"},
 		},
@@ -900,7 +900,7 @@ func deployK8sDsbOrcs(ctx *cmd.DeployerContext) error {
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 			{Name: "PORT", Value: "8080"},
 			{Name: "HOST", Value: "0.0.0.0"},
 		},
@@ -937,7 +937,7 @@ func deployK8sVolumeDsbOrcs(ctx *cmd.DeployerContext) error {
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 			{Name: "PORT", Value: "8080"},
 			{Name: "HOST", Value: "0.0.0.0"},
 		},
@@ -1210,7 +1210,7 @@ func createReplicationControllerStruct(
 	containerSpec.Image = imageName
 	containerSpec.ImagePullPolicy = v1.PullIfNotPresent
 	containerSpec.Ports = []v1.ContainerPort{{ContainerPort: 8080}}
-	containerSpec.Env = []v1.EnvVar{{Name: "NAZ_DEPLOYMENT_TYPE", Value: deploymentType}}
+	containerSpec.Env = []v1.EnvVar{{Name: "OCOPEA_DEPLOYMENT_TYPE", Value: deploymentType}}
 	containers := []v1.Container{containerSpec}
 
 	spec.Template.Spec = v1.PodSpec{}

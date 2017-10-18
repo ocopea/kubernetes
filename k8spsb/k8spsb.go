@@ -699,7 +699,7 @@ func main() {
 	var lcb bool
 	gLocalClusterIp, lcb = os.LookupEnv("LOCAL_CLUSTER_IP")
 
-	deploymentType = os.Getenv("NAZ_DEPLOYMENT_TYPE")
+	deploymentType = os.Getenv("OCOPEA_DEPLOYMENT_TYPE")
 	k8sUserName := os.Getenv("K8S_USERNAME")
 	k8sPassword := os.Getenv("K8S_PASSWORD")
 
@@ -707,7 +707,7 @@ func main() {
 		*k8sURL = "https://" + host + ":" + port
 	}
 
-	nazNS := os.Getenv("NAZ_NAMESPACE")
+	nazNS := os.Getenv("OCOPEA_NAMESPACE")
 	if len(nazNS) == 0 {
 		nazNS = *k8sNamespace
 	}

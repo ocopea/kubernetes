@@ -168,7 +168,7 @@ func deployOrcsService(
 	rcRequest, err := createReplicationControllerStruct(
 		"orcs",
 		ctx.DeploymentType,
-		"ocopea/orcs-k8s-runner:0.20",
+		"ocopea/orcs-k8s-runner",
 		"orcs")
 
 	if err != nil {

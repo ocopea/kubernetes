@@ -1244,7 +1244,7 @@ func createK8SServiceStruct(
 			svcType = v1.ServiceTypeNodePort
 			break
 		case "aws":
-		case "gcp":
+		case "gce":
 		default:
 			svcType = v1.ServiceTypeLoadBalancer
 			break

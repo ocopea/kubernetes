@@ -202,7 +202,6 @@ func deployOrcsService(
 			rcRequest.Spec.Template.Spec.Containers[0].Env,
 			v1.EnvVar{Name: "NAZ_MS_CONF", Value: confJson})
 
-	// todo:amit:check what is this NAZ_PUBLIC_ROUTE shit
 	var publicRoute string
 	additionalPortsJSON := ""
 	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
@@ -1244,7 +1243,9 @@ func createK8SServiceStruct(
 			svcType = v1.ServiceTypeNodePort
 			break
 		case "aws":
+			fallthrough
 		case "gce":
+			fallthrough
 		default:
 			svcType = v1.ServiceTypeLoadBalancer
 			break
@@ -1325,13 +1326,6 @@ func deployService(
 			rcRequest.Spec.Template.Spec.Containers[0].Ports,
 			v1.ContainerPort{ContainerPort: currPort.TargetPort.IntVal})
 	}
-
-	/*
-		rcRequest.Spec.Template.Spec.Containers[0].Env =
-			append(
-				rcRequest.Spec.Template.Spec.Containers[0].Env,
-				v1.EnvVar{Name:"NAZ_ROUTE", Value: "http://" + svc.Spec.ClusterIP})
-	*/
 
 	var publicRoute string
 	additionalPortsJSON := ""

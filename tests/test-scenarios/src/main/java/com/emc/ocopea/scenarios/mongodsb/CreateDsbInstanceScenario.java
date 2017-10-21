@@ -1,3 +1,4 @@
+// Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 package com.emc.ocopea.scenarios.mongodsb;
 
 import com.emc.ocopea.scenarios.BaseScenario;

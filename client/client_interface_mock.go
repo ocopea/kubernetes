@@ -1,3 +1,4 @@
+// Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 // Package client provides a super thin k8s client for ocopea that covers only the minimal requirements
 // At this stage the official "supported" k8s go library is shit. it pulls dependencies of the entire k8s repository(!)
 // K8S maintainers recommended not using it at this stage in some group discussion

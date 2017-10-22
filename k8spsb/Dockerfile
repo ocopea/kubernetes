@@ -4,12 +4,11 @@ FROM golang
 MAINTAINER Amit Lieberman<shpandrak@gmail.com>
 
 # Copy the local package files to the container's workspace.
-ADD . /go/src/ocopea/kubernetes
+ADD . /go/src/ocopea/kubernetes/k8spsb
 
 # Build command inside the container.
 # (You may fetch or manage dependencies here,
 # either manually or with a tool like "godep".)
-RUN go get github.com/gorilla/mux && go get github.com/gorilla/websocket
 RUN go install ocopea/kubernetes/k8spsb
 
 ENTRYPOINT /go/bin/k8spsb

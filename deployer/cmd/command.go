@@ -1,11 +1,12 @@
+// Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 package cmd
 
 import (
-	"flag"
-	k8sClient "ocopea/kubernetes/client"
-	"fmt"
-	"os"
 	"errors"
+	"flag"
+	"fmt"
+	k8sClient "ocopea/kubernetes/client"
+	"os"
 	"strings"
 )
 
@@ -31,16 +32,14 @@ type globalArgsBag struct {
 	password       *string
 }
 
-
 func addGlobalFlagsToFlagSet(flagSet *flag.FlagSet) globalArgsBag {
 	return globalArgsBag{
-		k8sURL : flagSet.String("url", "http://localhost:8080", "K8S remote api url"),
-		k8sNamespace : flagSet.String("namespace", "ocopea", "K8S namespace to use"),
-		deploymentType : flagSet.String("deployment-type", "local", "Deployment type"),
-		localClusterIp : flagSet.String("local-cluster-ip", "", "Local cluster ip - only relevant on local deployments"),
-		userName : flagSet.String("user", "", ""),
-		password : flagSet.String("password", "", "Password"),
-
+		k8sURL:         flagSet.String("url", "http://localhost:8080", "K8S remote api url"),
+		k8sNamespace:   flagSet.String("namespace", "ocopea", "K8S namespace to use"),
+		deploymentType: flagSet.String("deployment-type", "local", "Deployment type"),
+		localClusterIp: flagSet.String("local-cluster-ip", "", "Local cluster ip - only relevant on local deployments"),
+		userName:       flagSet.String("user", "", ""),
+		password:       flagSet.String("password", "", "Password"),
 	}
 
 }
@@ -71,16 +70,16 @@ func Exec(deployerCommands []*DeployerCommand) error {
 
 	var commandToUse *DeployerCommand = nil
 	for _, currCommand := range deployerCommands {
-		if (currCommand.Name == command) {
-			commandToUse = currCommand;
+		if currCommand.Name == command {
+			commandToUse = currCommand
 			break
 		}
 	}
 
-	if (commandToUse == nil) {
+	if commandToUse == nil {
 		fmt.Printf("%s is not valid command.\n", command)
 		PrintFullUsage(deployerCommands)
-		return errors.New("Invalid command");
+		return errors.New("Invalid command")
 	}
 
 	// Adding global flags to the selected command
@@ -105,28 +104,25 @@ func initializeDeployerContext(globalArgs globalArgsBag) (error, *DeployerContex
 	fmt.Printf("k8s url: %s\nnamespace: %s\ndeployment: %s\nuser: %s\n",
 		*globalArgs.k8sURL, *globalArgs.k8sNamespace, *globalArgs.deploymentType, *globalArgs.userName)
 
-
 	// input validation
-	if (strings.Compare(*globalArgs.deploymentType, "local") == 0 &&
-		len(*globalArgs.localClusterIp) == 0) {
+	if strings.Compare(*globalArgs.deploymentType, "local") == 0 &&
+		len(*globalArgs.localClusterIp) == 0 {
 		return errors.New("on local deployment, you must provide local-cluster-ip flag, bye.."), nil
 	}
 
 	// Building "secure" http client for communicating with the target kubernetes cluster
 	client, err := k8sClient.NewClient(*globalArgs.k8sURL, *globalArgs.k8sNamespace, *globalArgs.userName, *globalArgs.password, "")
-	if (err != nil) {
+	if err != nil {
 		return errors.New("Failed creating connection with kubernetes cluster " + err.Error()), nil
 	}
 
 	// Instantiating deployer context struct
 	return nil,
 		&DeployerContext{
-			Namespace: *globalArgs.k8sNamespace,
-			Client: client,
-			ClusterIp: *globalArgs.localClusterIp,
+			Namespace:      *globalArgs.k8sNamespace,
+			Client:         client,
+			ClusterIp:      *globalArgs.localClusterIp,
 			DeploymentType: *globalArgs.deploymentType,
 		}
 
 }
-
-

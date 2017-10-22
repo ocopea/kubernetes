@@ -1,1 +1,2 @@
+# Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 $(kubectl describe svc mongo-k8s-dsb --namespace=testing | grep NodePort: | awk '{print $3}' | awk -F'/' '{print "java -jar mongodsb-tester/target/mongodsb-tester.jar http://minikubeip:"$1"/dsb"}' | sed "s/minikubeip/$(minikube ip)/g")

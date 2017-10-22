@@ -1,3 +1,4 @@
+// Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 package com.emc.ocopea.scenarios;
 
 import org.jboss.resteasy.plugins.providers.jackson.ResteasyJackson2Provider;

@@ -1,1 +1,2 @@
+# Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 $(kubectl describe svc orcs --namespace=ocopea | grep NodePort: | awk '{print $3}' | awk -F'/' '{print "java -jar k8s-deployer-tester/target/k8s-deployer-tester.jar http://minikubeip:"$1""}' | sed "s/minikubeip/$(minikube ip)/g")

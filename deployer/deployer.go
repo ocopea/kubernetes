@@ -1,3 +1,4 @@
+// Copyright (c) [2017] Dell Inc. or its subsidiaries. All Rights Reserved.
 package main
 
 import (
@@ -168,7 +169,7 @@ func deployOrcsService(
 	rcRequest, err := createReplicationControllerStruct(
 		"orcs",
 		ctx.DeploymentType,
-		"ocopea/orcs-k8s-runner:0.20",
+		"ocopea/orcs-k8s-runner",
 		"orcs")
 
 	if err != nil {
@@ -181,7 +182,7 @@ func deployOrcsService(
 			rcRequest.Spec.Template.Spec.Containers[0].Env,
 			v1.EnvVar{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			v1.EnvVar{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			v1.EnvVar{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace})
+			v1.EnvVar{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace})
 
 	rootConfNode := createOrcsServicesConfiguration(
 		pgService,
@@ -202,7 +203,6 @@ func deployOrcsService(
 			rcRequest.Spec.Template.Spec.Containers[0].Env,
 			v1.EnvVar{Name: "NAZ_MS_CONF", Value: confJson})
 
-	// todo:amit:check what is this NAZ_PUBLIC_ROUTE shit
 	var publicRoute string
 	additionalPortsJSON := ""
 	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
@@ -437,16 +437,6 @@ func deploySiteCommandExecutor(ctx *cmd.DeployerContext) error {
 		ctx,
 		"lets-chat-template.json",
 		"lets-chat.png",
-	)
-	if err != nil {
-		return fmt.Errorf("Failed creating application template - %s", err.Error())
-	}
-
-	// Creating the wordpress app template
-	err = createAppTemplateOrcs(
-		ctx,
-		"wordpress-template.json",
-		"wordpress.png",
 	)
 	if err != nil {
 		return fmt.Errorf("Failed creating application template - %s", err.Error())
@@ -847,7 +837,7 @@ func deployK8sPsbOrcs(ctx *cmd.DeployerContext, exposePublic bool) (*v1.Service,
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 		},
 		80,
 		8080,
@@ -879,7 +869,7 @@ func deployMongoDsbOrcs(ctx *cmd.DeployerContext, exposePublic bool) (*v1.Servic
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 			{Name: "PORT", Value: "8080"},
 			{Name: "HOST", Value: "0.0.0.0"},
 		},
@@ -910,7 +900,7 @@ func deployK8sDsbOrcs(ctx *cmd.DeployerContext) error {
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 			{Name: "PORT", Value: "8080"},
 			{Name: "HOST", Value: "0.0.0.0"},
 		},
@@ -947,7 +937,7 @@ func deployK8sVolumeDsbOrcs(ctx *cmd.DeployerContext) error {
 		[]v1.EnvVar{
 			{Name: "K8S_USERNAME", Value: ctx.Client.UserName},
 			{Name: "K8S_PASSWORD", Value: ctx.Client.Password},
-			{Name: "NAZ_NAMESPACE", Value: ctx.Client.Namespace},
+			{Name: "OCOPEA_NAMESPACE", Value: ctx.Client.Namespace},
 			{Name: "PORT", Value: "8080"},
 			{Name: "HOST", Value: "0.0.0.0"},
 		},
@@ -1220,7 +1210,7 @@ func createReplicationControllerStruct(
 	containerSpec.Image = imageName
 	containerSpec.ImagePullPolicy = v1.PullIfNotPresent
 	containerSpec.Ports = []v1.ContainerPort{{ContainerPort: 8080}}
-	containerSpec.Env = []v1.EnvVar{{Name: "NAZ_DEPLOYMENT_TYPE", Value: deploymentType}}
+	containerSpec.Env = []v1.EnvVar{{Name: "OCOPEA_DEPLOYMENT_TYPE", Value: deploymentType}}
 	containers := []v1.Container{containerSpec}
 
 	spec.Template.Spec = v1.PodSpec{}
@@ -1254,7 +1244,9 @@ func createK8SServiceStruct(
 			svcType = v1.ServiceTypeNodePort
 			break
 		case "aws":
-		case "gcp":
+			fallthrough
+		case "gce":
+			fallthrough
 		default:
 			svcType = v1.ServiceTypeLoadBalancer
 			break
@@ -1335,13 +1327,6 @@ func deployService(
 			rcRequest.Spec.Template.Spec.Containers[0].Ports,
 			v1.ContainerPort{ContainerPort: currPort.TargetPort.IntVal})
 	}
-
-	/*
-		rcRequest.Spec.Template.Spec.Containers[0].Env =
-			append(
-				rcRequest.Spec.Template.Spec.Containers[0].Env,
-				v1.EnvVar{Name:"NAZ_ROUTE", Value: "http://" + svc.Spec.ClusterIP})
-	*/
 
 	var publicRoute string
 	additionalPortsJSON := ""
@@ -1477,7 +1462,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 	defer resp.Body.Close()
 	btt, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("Whatever - failed reading create template response " + err.Error())
+		log.Println("Failed reading create template response " + err.Error())
 	}
 
 	if resp.StatusCode != http.StatusConflict {
@@ -1485,7 +1470,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 
 		f, err := os.Open(iconPath)
 		if err != nil {
-			log.Println("Whatever - failed reading icon path - " + err.Error())
+			log.Println("Failed reading icon path - " + err.Error())
 		}
 		postIconUrl := orcsServiceUrl + "/hub-web-api/images/app-template/" + appTemplateId
 		log.Println("Posting icon to " + postIconUrl)
@@ -1495,14 +1480,14 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 			f)
 
 		if err != nil {
-			log.Println("Whatever - failed reading create post for icon - " + err.Error())
+			log.Println("Failed reading create post for icon - " + err.Error())
 		}
 		reqIcon.Header.Add("Content-Type", "application/octet-stream")
 		reqIcon.SetBasicAuth("shpandrak", "1234")
 
 		_, err = http.DefaultClient.Do(reqIcon)
 		if err != nil {
-			log.Println("Whatever - failed posting app template icon - " + err.Error())
+			log.Println("Failed posting app template icon - " + err.Error())
 		}
 	}
 	fmt.Printf("successfully created application template using %s, icon:%s\n", templatePath, iconPath)
@@ -1542,7 +1527,7 @@ func getSiteIdOrcs(ctx *cmd.DeployerContext, siteUrn string) (error, string) {
 		return fmt.Errorf("Failed decoding sits array - %s", err.Error()), ""
 	}
 
-	//todo: only do on debug - is there a go shit to do that? if debug?
+	//todo: only do on debug
 	str, err := json.Marshal(sitesArray)
 	if err != nil {
 		log.Println(err)

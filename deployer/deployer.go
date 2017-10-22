@@ -1462,7 +1462,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 	defer resp.Body.Close()
 	btt, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("Whatever - failed reading create template response " + err.Error())
+		log.Println("Failed reading create template response " + err.Error())
 	}
 
 	if resp.StatusCode != http.StatusConflict {
@@ -1470,7 +1470,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 
 		f, err := os.Open(iconPath)
 		if err != nil {
-			log.Println("Whatever - failed reading icon path - " + err.Error())
+			log.Println("Failed reading icon path - " + err.Error())
 		}
 		postIconUrl := orcsServiceUrl + "/hub-web-api/images/app-template/" + appTemplateId
 		log.Println("Posting icon to " + postIconUrl)
@@ -1480,14 +1480,14 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 			f)
 
 		if err != nil {
-			log.Println("Whatever - failed reading create post for icon - " + err.Error())
+			log.Println("Failed reading create post for icon - " + err.Error())
 		}
 		reqIcon.Header.Add("Content-Type", "application/octet-stream")
 		reqIcon.SetBasicAuth("shpandrak", "1234")
 
 		_, err = http.DefaultClient.Do(reqIcon)
 		if err != nil {
-			log.Println("Whatever - failed posting app template icon - " + err.Error())
+			log.Println("Failed posting app template icon - " + err.Error())
 		}
 	}
 	fmt.Printf("successfully created application template using %s, icon:%s\n", templatePath, iconPath)
@@ -1527,7 +1527,7 @@ func getSiteIdOrcs(ctx *cmd.DeployerContext, siteUrn string) (error, string) {
 		return fmt.Errorf("Failed decoding sits array - %s", err.Error()), ""
 	}
 
-	//todo: only do on debug - is there a go shit to do that? if debug?
+	//todo: only do on debug
 	str, err := json.Marshal(sitesArray)
 	if err != nil {
 		log.Println(err)

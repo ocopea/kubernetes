@@ -1,5 +1,5 @@
 // Package client provides a super thin k8s client for ocopea that covers only the minimal requirements
-// At this stage the official "supported" k8s go library is shit. it pulls dependencies of the entire k8s repository(!)
+// At this stage the official "supported" k8s go library pulls dependencies of the entire k8s repository(!)
 // K8S maintainers recommended not using it at this stage in some group discussion
 // In the future we should consider using an official k8s go client library if available
 // In order to maintain compatibility in case we'll switch in the future, we're using the swagger api generated code

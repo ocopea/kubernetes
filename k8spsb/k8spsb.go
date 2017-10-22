@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
 	"io"
 	"log"
 	"net/http"
@@ -20,6 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -654,7 +655,7 @@ func deployApp(w http.ResponseWriter, r *http.Request) *deployError {
 func PrintService(s *v1.Service) {
 	s, err := kClient.WaitForServiceToStart(s.Name, 100, time.Second*3)
 	if err != nil {
-		fmt.Printf("Ok, like.. whatever.. %s\n", err.Error())
+		fmt.Printf("Service failed to start with error %s\n", err.Error())
 	}
 
 	var serviceURL string

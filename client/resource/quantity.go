@@ -20,9 +20,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"ocopea/kubernetes/client/inf"
 	"regexp"
 	"strings"
-	"ocopea/kubernetes/client/inf"
 )
 
 // Quantity is a fixed-point representation of a number.

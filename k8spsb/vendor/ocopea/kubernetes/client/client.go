@@ -1,5 +1,5 @@
 // Package client provides a super thin k8s client for ocopea that covers only the minimal requirements
-// At this stage the official "supported" k8s go library is shit. it pulls dependencies of the entire k8s repository(!)
+// At this stage the official "supported" k8s go library pulls dependencies of the entire k8s repository(!)
 // K8S maintainers recommended not using it at this stage in some group discussion
 // In the future we should consider using an official k8s go client library if available
 // In order to maintain compatibility in case we'll switch in the future, we're using the swagger api generated code
@@ -163,7 +163,7 @@ func (c *Client) createEntity(entityTypeName string, entityName string, entityTo
 		dec := json.NewDecoder(resp.Body)
 		dec.Decode(responseEntityPtr)
 
-		//todo: only do on debug - is there a go shit to do that? if debug?
+		//todo: only do on debug
 		_, err = json.MarshalIndent(responseEntityPtr, "", "    ")
 		if err != nil {
 			log.Printf("Failed parsing json for response of created entity %s - %s\n", resourceName, err.Error())
@@ -314,7 +314,7 @@ func (c *Client) GetPersistentVolumeInfo(persistentVolumeName string) (*v1.Persi
 		return nil, fmt.Errorf("Failed decoding pv %s - %s", persistentVolumeName, err.Error())
 	}
 
-	//todo: only do on debug - is there a go shit to do that? if debug?
+	//todo: only do on debug
 	str, err := json.MarshalIndent(respPv, "", "    ")
 	if err != nil {
 		log.Println(err)
@@ -361,7 +361,7 @@ func (c *Client) getEntityInfo(entityTypeName string, entityName string, entityS
 	dec := json.NewDecoder(resp.Body)
 	dec.Decode(entityStructPtr)
 
-	//todo: only do on debug - is there a go shit to do that? if debug?
+	//todo: only do on debug
 	str, err := json.MarshalIndent(entityStructPtr, "", "    ")
 	if err != nil {
 		log.Printf("Failed parsing json for response of entity %s - %s\n", resourceName, err.Error())
@@ -446,7 +446,7 @@ func (c *Client) DeletePod(podName string) (*v1.Pod, error) {
 	dec := json.NewDecoder(resp.Body)
 	dec.Decode(&respPod)
 
-	//todo: only do on debug - is there a go shit to do that? if debug?
+	//todo: only do on debug
 	str, err := json.MarshalIndent(respPod, "", "    ")
 	if err != nil {
 		log.Println(err)
@@ -474,7 +474,7 @@ func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries 
 		return err
 	}
 	if !exist {
-		log.Printf("Could not find namespace %s when trying to delete.. whatever...\n", nsName)
+		log.Printf("Could not find namespace %s when trying to delete\n", nsName)
 		return nil
 	}
 	err = c.DeleteNamespace(nsName)
@@ -494,7 +494,7 @@ func (c *Client) DeleteNamespaceAndWaitForTermination(nsName string, maxRetries 
 
 	// If service did not start by now, fail the deployment
 	if nsStillTerminating {
-		return fmt.Errorf("Bloody namespace %s failed to die even after %d freaking retries", nsName, maxRetries)
+		return fmt.Errorf("Namespace %s failed to terminate even after %d retries", nsName, maxRetries)
 	}
 
 	return nil
@@ -505,10 +505,10 @@ func (c *Client) DeleteNamespace(nsName string) error {
 }
 
 func (c *Client) DeleteReplicationController(rcName string) error {
-	return c.deleteEntity("namespaces/"+c.Namespace+"/"+"replicationcontrollers/" + rcName)
+	return c.deleteEntity("namespaces/" + c.Namespace + "/" + "replicationcontrollers/" + rcName)
 }
 func (c *Client) DeleteService(serviceName string) error {
-	return c.deleteEntity("namespaces/"+c.Namespace+"/"+"services/" + serviceName)
+	return c.deleteEntity("namespaces/" + c.Namespace + "/" + "services/" + serviceName)
 }
 
 func (c *Client) deleteEntity(relativeUrl string) error {
@@ -698,7 +698,7 @@ func (c *Client) WaitForServiceToStart(serviceName string, maxRetries int, sleep
 
 	// If service did not start by now, fail the deployment
 	if !serviceReady {
-		return svc, fmt.Errorf("Bloody service %s failed to start after %d retries", serviceName, maxRetries)
+		return svc, fmt.Errorf("Service %s failed to start after %d retries", serviceName, maxRetries)
 	}
 
 	return svc, nil

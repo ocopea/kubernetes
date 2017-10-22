@@ -2,14 +2,14 @@
 package configuration
 
 import (
-	"net/http"
+	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"encoding/json"
-	"strings"
-	"bytes"
 	"log"
+	"net/http"
+	"strings"
 )
 
 type PersistentSchedulerConfiguration struct {
@@ -33,29 +33,29 @@ type StandalonePostgresDatasourceConfiguration struct {
 }
 
 type InputQueueConfig struct {
-	NumberOfConsumers int `json:"numberOfConsumers"`
-	LogInDebug        bool `json:"logInDebug"`
+	NumberOfConsumers int      `json:"numberOfConsumers"`
+	LogInDebug        bool     `json:"logInDebug"`
 	DeadLetterQueues  []string `json:"deadLetterQueues"`
 }
 
 type DestinationQueueConfig struct {
 	BlobstoreNameSpace     string `json:"blobstoreNameSpace"`
 	BlobstoreKeyHeaderName string `json:"blobstoreKeyHeaderName"`
-	LogInDebug             bool `json:"logInDebug"`
+	LogInDebug             bool   `json:"logInDebug"`
 }
 
 type DataSourceConfig struct {
-	MaxConnections int `json:"maxConnections"`
+	MaxConnections int               `json:"maxConnections"`
 	Properties     map[string]string `json:"properties"`
 }
 
 type DevQueueConfiguration struct {
-	DestinationType string `json:"destinationType"`
+	DestinationType string            `json:"destinationType"`
 	Properties      map[string]string `json:"properties"`
 }
 
 type StaticConfigurationNode struct {
-	Data     interface{} `json:"data"`
+	Data     interface{}                        `json:"data"`
 	Children map[string]StaticConfigurationNode `json:"children"`
 }
 
@@ -65,29 +65,29 @@ type PersistentMessagingConfiguration struct {
 }
 
 type PersistentQueueConfiguration struct {
-	DestinationType string `json:"destinationType"`
-	QueueName string `json:"queueName"`
-	MemoryBufferMaxMessages string `json:"memoryBufferMaxMessages"`
+	DestinationType                     string `json:"destinationType"`
+	QueueName                           string `json:"queueName"`
+	MemoryBufferMaxMessages             string `json:"memoryBufferMaxMessages"`
 	SecondsToSleepBetweenMessageRetries string `json:"secondsToSleepBetweenMessageRetries"`
-	MaxRetries string `json:"maxRetries"`
+	MaxRetries                          string `json:"maxRetries"`
 }
 
 type UndertowWebServerConfiguration struct {
-	Port string `json:"port"`
+	Port     string `json:"port"`
 	BasePath string `json:"basePath"`
 }
 
 type ServiceConfig struct {
-	ServiceURI               string `json:"serviceURI"`
-	Route                    string `json:"route"`
-	GlobalLoggingConfig      string `json:"globalLoggingConfig"`
-	CorrelationLoggingConfig map[string]string `json:"correlationLoggingConfig"`
-	InputQueueConfig         map[string]InputQueueConfig `json:"inputQueueConfig"`
+	ServiceURI               string                            `json:"serviceURI"`
+	Route                    string                            `json:"route"`
+	GlobalLoggingConfig      string                            `json:"globalLoggingConfig"`
+	CorrelationLoggingConfig map[string]string                 `json:"correlationLoggingConfig"`
+	InputQueueConfig         map[string]InputQueueConfig       `json:"inputQueueConfig"`
 	DestinationQueueConfig   map[string]DestinationQueueConfig `json:"destinationQueueConfig"`
-	DataSourceConfig         map[string]DataSourceConfig `json:"dataSourceConfig"`
-	BlobstoreConfig          map[string]DataSourceConfig `json:"blobstoreConfig"`
-	Parameters               map[string]string `json:"parameters"`
-	ExternalResourceConfig   map[string]map[string]string `json:"externalResourceConfig"`
+	DataSourceConfig         map[string]DataSourceConfig       `json:"dataSourceConfig"`
+	BlobstoreConfig          map[string]DataSourceConfig       `json:"blobstoreConfig"`
+	Parameters               map[string]string                 `json:"parameters"`
+	ExternalResourceConfig   map[string]map[string]string      `json:"externalResourceConfig"`
 }
 
 type ConfigurationClient struct {
@@ -102,25 +102,25 @@ func NewConfigurationClient(url string) (*ConfigurationClient, error) {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	httpClient := http.Client{Transport: tr}
-	c := &ConfigurationClient{url:url, httpClient:httpClient}
+	c := &ConfigurationClient{url: url, httpClient: httpClient}
 
 	err := c.verifyConnectivity(c.url)
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-func (c *ConfigurationClient) verifyConnectivity(serviceURI string) (error) {
-	fmt.Printf("testing configuration service at %s", c.url);
+func (c *ConfigurationClient) verifyConnectivity(serviceURI string) error {
+	fmt.Printf("testing configuration service at %s", c.url)
 	resp, err := c.httpClient.Get(c.url + "/state")
-	if (err != nil) {
+	if err != nil {
 		return fmt.Errorf("failed connecting to configuration server at %s - %s", c.url, err.Error())
 	}
 	defer resp.Body.Close()
 
 	all, err := ioutil.ReadAll(resp.Body)
-	if (err != nil) {
+	if err != nil {
 		return fmt.Errorf("failed parsing configuration service state  at %s - %s", c.url, err.Error())
 	}
 	fmt.Println(string(all))
@@ -137,7 +137,7 @@ func (c *ConfigurationClient) verifyConnectivity(serviceURI string) (error) {
 }
 
 func (c *ConfigurationClient) RegisterService(serviceURI string, serviceConfig *ServiceConfig, overwrite bool) error {
-	var method string;
+	var method string
 	if overwrite {
 		method = "PUT"
 	} else {
@@ -162,14 +162,14 @@ func (c *ConfigurationClient) RegisterService(serviceURI string, serviceConfig *
 	if err != nil {
 		return fmt.Errorf("failed executing %s request on %s - %s", method, resource, err.Error())
 	}
-	if (resp.StatusCode != http.StatusNoContent) {
+	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad respons from %s request on %s - %s", method, resource, resp.Status)
 	}
 	return nil
 }
 
 func (c *ConfigurationClient) RegisterScheduler(schedulerName string, dataSourceName string, persistMessages bool, overwrite bool) error {
-	var method string;
+	var method string
 	if overwrite {
 		method = "PUT"
 	} else {
@@ -178,16 +178,16 @@ func (c *ConfigurationClient) RegisterScheduler(schedulerName string, dataSource
 	resource := c.url + "/configurations/scheduler/" + schedulerName
 
 	var schedulerConfig *PersistentSchedulerConfiguration
-	if (persistMessages) {
+	if persistMessages {
 		schedulerConfig = &PersistentSchedulerConfiguration{
-			Name:schedulerName,
-			DatasourceName:dataSourceName,
-			PersistTasks:"true",
+			Name:           schedulerName,
+			DatasourceName: dataSourceName,
+			PersistTasks:   "true",
 		}
 	} else {
 		schedulerConfig = &PersistentSchedulerConfiguration{
-			Name:schedulerName,
-			PersistTasks:"false",
+			Name:         schedulerName,
+			PersistTasks: "false",
 		}
 
 	}
@@ -209,14 +209,14 @@ func (c *ConfigurationClient) RegisterScheduler(schedulerName string, dataSource
 	if err != nil {
 		return fmt.Errorf("failed executing %s request on %s - %s", method, resource, err.Error())
 	}
-	if (resp.StatusCode != http.StatusNoContent) {
+	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad respons from %s request on %s - %s", method, resource, resp.Status)
 	}
 	return nil
 }
 
 func (c *ConfigurationClient) RegisterMessagingSystem(overwrite bool) error {
-	var method string;
+	var method string
 	if overwrite {
 		method = "PUT"
 	} else {
@@ -233,7 +233,7 @@ func (c *ConfigurationClient) RegisterMessagingSystem(overwrite bool) error {
 	if err != nil {
 		return fmt.Errorf("failed executing %s request on %s - %s", method, resource, err.Error())
 	}
-	if (resp.StatusCode != http.StatusNoContent) {
+	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad respons from %s request on %s - %s", method, resource, resp.Status)
 	}
 
@@ -243,7 +243,7 @@ func (c *ConfigurationClient) RegisterMessagingSystem(overwrite bool) error {
 
 }
 func (c *ConfigurationClient) RegisterExternalResource(resourceName string, overwrite bool) error {
-	var method string;
+	var method string
 	if overwrite {
 		method = "PUT"
 	} else {
@@ -260,7 +260,7 @@ func (c *ConfigurationClient) RegisterExternalResource(resourceName string, over
 	if err != nil {
 		return fmt.Errorf("failed executing %s request on %s - %s", method, resource, err.Error())
 	}
-	if (resp.StatusCode != http.StatusNoContent) {
+	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad respons from %s request on %s - %s", method, resource, resp.Status)
 	}
 
@@ -269,7 +269,7 @@ func (c *ConfigurationClient) RegisterExternalResource(resourceName string, over
 }
 
 func (c *ConfigurationClient) RegisterBlobStore(blobStoreName string, overwrite bool) error {
-	var method string;
+	var method string
 	if overwrite {
 		method = "PUT"
 	} else {
@@ -277,7 +277,7 @@ func (c *ConfigurationClient) RegisterBlobStore(blobStoreName string, overwrite 
 	}
 	resource := c.url + "/configurations/blobstore/" + blobStoreName
 
-	blobStoreConfig := &DevBlobstoreConfiguration{Name:blobStoreName}
+	blobStoreConfig := &DevBlobstoreConfiguration{Name: blobStoreName}
 	//todo:is this the right/best/easiest way to do streaming for posting json
 	b := new(bytes.Buffer)
 	enc := json.NewEncoder(b)
@@ -295,14 +295,14 @@ func (c *ConfigurationClient) RegisterBlobStore(blobStoreName string, overwrite 
 	if err != nil {
 		return fmt.Errorf("failed executing %s request on %s - %s", method, resource, err.Error())
 	}
-	if (resp.StatusCode != http.StatusNoContent) {
+	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad respons from %s request on %s - %s", method, resource, resp.Status)
 	}
 	return nil
 }
 
 func (c *ConfigurationClient) RegisterQueue(queueName string, overwrite bool) error {
-	var method string;
+	var method string
 	if overwrite {
 		method = "PUT"
 	} else {
@@ -310,7 +310,7 @@ func (c *ConfigurationClient) RegisterQueue(queueName string, overwrite bool) er
 	}
 	resource := c.url + "/configurations/queue/" + queueName
 
-	blobStoreConfig := &DevQueueConfiguration{DestinationType:"QUEUE"}
+	blobStoreConfig := &DevQueueConfiguration{DestinationType: "QUEUE"}
 	//todo:is this the right/best/easiest way to do streaming for posting json
 	b := new(bytes.Buffer)
 	enc := json.NewEncoder(b)
@@ -328,7 +328,7 @@ func (c *ConfigurationClient) RegisterQueue(queueName string, overwrite bool) er
 	if err != nil {
 		return fmt.Errorf("failed executing %s request on %s - %s", method, resource, err.Error())
 	}
-	if (resp.StatusCode != http.StatusNoContent) {
+	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad respons from %s request on %s - %s", method, resource, resp.Status)
 	}
 	return nil
@@ -344,24 +344,21 @@ func (c *ConfigurationClient) GetServiceConfig(serviceUri string) (*ServiceConfi
 	}
 
 	resp, err := c.httpClient.Do(req)
-	if (err != nil) {
+	if err != nil {
 		return nil, fmt.Errorf("Failed getting service configuration %s - %s", serviceUri, err.Error())
 	}
 	defer resp.Body.Close()
-	var respServiceConfig ServiceConfig;
+	var respServiceConfig ServiceConfig
 	dec := json.NewDecoder(resp.Body)
 	dec.Decode(&respServiceConfig)
 
-	//todo: only do on debug - is there a go shit to do that? if debug?
+	//todo: only do on debug
 	str, err := json.Marshal(respServiceConfig)
-	if (err != nil) {
+	if err != nil {
 		log.Println(err)
 	}
 	log.Printf("\n%s on %s returned\n\n%s\n\n", method, resource, string(str))
 
-	return &respServiceConfig, nil;
-
+	return &respServiceConfig, nil
 
 }
-
-

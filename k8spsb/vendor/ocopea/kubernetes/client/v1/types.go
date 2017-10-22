@@ -18,8 +18,8 @@ package v1
 
 import (
 	"ocopea/kubernetes/client/resource"
-	"ocopea/kubernetes/client/unversioned"
 	"ocopea/kubernetes/client/types"
+	"ocopea/kubernetes/client/unversioned"
 )
 
 // The comments for the structs and fields can be used from go-resful to

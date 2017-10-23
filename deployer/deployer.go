@@ -26,6 +26,9 @@ This utility deploys ocopea site instance to a k8s cluster
 It assumes all docker images are built and published to a repository accessible by the k8s cluster
 */
 
+const OCOPEA_ADMIN_USERNAME = "admin"
+const OCOPEA_ADMIN_PASSWORD = "nazgul"
+
 type deployServiceInfo struct {
 	ServiceName                string
 	ImageName                  string
@@ -1069,10 +1072,7 @@ func postCommandOrcs(
 		return fmt.Errorf("Failed posting command %s to %s - %s", commandName, svcUrn, err.Error())
 	}
 
-	req.Header.Add("Content-Type", "application/json")
-	req.SetBasicAuth("shpandrak", "1234")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(prepareOcopeaRequest(req))
 	if err != nil {
 		return fmt.Errorf("Failed executing command %s on %s - %s", commandName, svcUrn, err.Error())
 	}
@@ -1444,10 +1444,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 		return fmt.Errorf("Failed creating app template - %s", err.Error())
 	}
 
-	req.Header.Add("Content-Type", "application/json")
-	req.SetBasicAuth("shpandrak", "1234")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(prepareOcopeaRequest(req))
 
 	if err != nil {
 		return fmt.Errorf("Failed posting new app template - %s", err.Error())
@@ -1482,10 +1479,7 @@ func createAppTemplateOrcs(ctx *cmd.DeployerContext, templatePath string, iconPa
 		if err != nil {
 			log.Println("Failed reading create post for icon - " + err.Error())
 		}
-		reqIcon.Header.Add("Content-Type", "application/octet-stream")
-		reqIcon.SetBasicAuth("shpandrak", "1234")
-
-		_, err = http.DefaultClient.Do(reqIcon)
+		_, err = http.DefaultClient.Do(prepareOcopeaRequestWithContentType(reqIcon, "application/octet-stream"))
 		if err != nil {
 			log.Println("Failed posting app template icon - " + err.Error())
 		}
@@ -1507,10 +1501,7 @@ func getSiteIdOrcs(ctx *cmd.DeployerContext, siteUrn string) (error, string) {
 		return fmt.Errorf("Failed createing app template req - %s", err.Error()), ""
 	}
 
-	req.Header.Add("Content-Type", "application/json")
-	req.SetBasicAuth("shpandrak", "1234")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(prepareOcopeaRequest(req))
 
 	if err != nil {
 		return fmt.Errorf("Failed posting new app template - %s", err.Error()), ""
@@ -1572,10 +1563,8 @@ func verifyOrcsServiceHasStarted(ctx *cmd.DeployerContext, serviceEndpoint strin
 	if err != nil {
 		return fmt.Errorf("failed creating get request on %s - %s", stateUrl, err.Error())
 	}
-	req.Header.Add("Content-Type", "application/json")
-	req.SetBasicAuth("shpandrak", "1234")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(prepareOcopeaRequest(req))
 	if err != nil {
 		return err
 	}
@@ -1611,4 +1600,17 @@ func extractLoadBalancerAddress(loadBalancerStatus v1.LoadBalancerStatus) string
 		return loadBalancerStatus.Ingress[0].Hostname
 	}
 	return ""
+}
+
+func prepareOcopeaRequestWithContentType(req *http.Request, contentType string) *http.Request {
+	req.Header.Add("Content-Type", contentType)
+	req.SetBasicAuth(
+		OCOPEA_ADMIN_USERNAME,
+		OCOPEA_ADMIN_PASSWORD,
+	)
+	return req
+
+}
+func prepareOcopeaRequest(req *http.Request) *http.Request {
+	return prepareOcopeaRequestWithContentType(req, "application/json")
 }

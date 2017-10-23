@@ -34,6 +34,8 @@ import static net.javacrumbs.jsonunit.JsonAssert.assertJsonEquals;
  * Drink responsibly
  */
 public abstract class BaseScenario {
+    private static final String OCOPEA_ADMIN_USERNAME = "admin";
+    private static final String OCOPEA_ADMIN_PASSWORD = "nazgul";
     private final String name;
     private String rootUrl;
     private Client client;
@@ -81,7 +83,9 @@ public abstract class BaseScenario {
 
     private WebTarget getTarget(String path) {
         final WebTarget target = client.target(rootUrl + "/" + path);
-        target.register(new BasicAuthentication("shpandrak", "1234"));
+        target.register(new BasicAuthentication(
+                OCOPEA_ADMIN_USERNAME,
+                OCOPEA_ADMIN_PASSWORD));
         return target;
     }
 
@@ -174,8 +178,8 @@ public abstract class BaseScenario {
 
     protected String readResourceAsString(String name, Map<String, String> tokenValues) {
         try (InputStream resourceAsStream = getClass().getClassLoader().getResourceAsStream(name);
-                Reader r = new InterpolationFilterReader(
-                        new InputStreamReader(resourceAsStream, StandardCharsets.UTF_8), new HashMap<>(tokenValues))) {
+             Reader r = new InterpolationFilterReader(
+                     new InputStreamReader(resourceAsStream, StandardCharsets.UTF_8), new HashMap<>(tokenValues))) {
             return IOUtils.toString(r);
         } catch (IOException e) {
             throw new IllegalStateException(e);
@@ -204,7 +208,7 @@ public abstract class BaseScenario {
         int attempt = 0;
         String state = null;
 
-        int maxRetries = 20;
+        int maxRetries = 100;
         while (attempt < maxRetries) {
             Map stateMap = doGet("hub-web-api/app-instance/" + appInstanceId + "/state", Map.class,
                     (response, value) -> Assert.assertEquals("Failed getting app instance status",
@@ -214,14 +218,14 @@ public abstract class BaseScenario {
 
             System.out.println(state);
             switch (state) {
-            case "DEPLOYING":
-                sleepNoException(3000);
-                break;
-            case "RUNNING":
-                attempt = maxRetries;
-                break;
-            default:
-                Assert.fail("App entered unexpected state: " + state);
+                case "DEPLOYING":
+                    sleepNoException(3000);
+                    break;
+                case "RUNNING":
+                    attempt = maxRetries;
+                    break;
+                default:
+                    Assert.fail("App entered unexpected state: " + state);
             }
 
             ++attempt;
@@ -243,14 +247,14 @@ public abstract class BaseScenario {
 
             System.out.println(state);
             switch (state) {
-            case "STOPPING":
-                sleepNoException(3000);
-                break;
-            case "STOPPED":
-                attempt = maxRetries;
-                break;
-            default:
-                Assert.fail("App entered unexpected state: " + state);
+                case "STOPPING":
+                    sleepNoException(3000);
+                    break;
+                case "STOPPED":
+                    attempt = maxRetries;
+                    break;
+                default:
+                    Assert.fail("App entered unexpected state: " + state);
             }
 
             ++attempt;
@@ -266,7 +270,8 @@ public abstract class BaseScenario {
         }
     }
 
-    protected void populateServiceConfigurationParams(Map<String, String> tokenValues, UUID siteId,
+    protected void populateServiceConfigurationParams(
+            Map<String, String> tokenValues, UUID siteId,
             UUID appTemplateId) {
         final Map siteSpaces = doGet("hub-web-api/site-topology/" + siteId.toString(), Map.class);
 
@@ -294,8 +299,8 @@ public abstract class BaseScenario {
 
         // Expecting a single data service
         @SuppressWarnings("unchecked")
-        final List<Map> dataServiceConfigurations = (List<Map>) supportedConfigurationsOnSite
-                .get("dataServiceConfigurations");
+        final List<Map> dataServiceConfigurations =
+                (List<Map>) supportedConfigurationsOnSite.get("dataServiceConfigurations");
 
         if (dataServiceConfigurations.isEmpty()) {
             Assert.fail("No supported data service configuration for app on site");
@@ -307,17 +312,20 @@ public abstract class BaseScenario {
         parseDataService(tokenValues, supportedConfigurationsOnSite, singeDataServiceName, "dsb");
     }
 
-    private void parseDataService(Map<String, String> tokenValues, Map supportedConfigurationsOnSite,
-            String dataServiceName, String prefix) {
+    private void parseDataService(
+            Map<String, String> tokenValues,
+            Map supportedConfigurationsOnSite,
+            String dataServiceName,
+            String prefix) {
         //noinspection unchecked
         ((List<Map>) supportedConfigurationsOnSite.get("dataServiceConfigurations")).stream()
                 .filter(m -> dataServiceName.equals(m.get("dataServiceName").toString())).forEach(map -> {
-                    final Map dsbPlans = (Map) ((Map) map.get("dsbPlans")).values().iterator().next();
-                    tokenValues.put(prefix + "Urn", dsbPlans.get("name").toString());
-                    final Map plan = (Map) ((List) dsbPlans.get("plans")).get(0);
-                    tokenValues.put(prefix + "Plan", plan.get("id").toString());
-                    tokenValues.put(prefix + "Protocol", ((List) plan.get("protocols")).get(0).toString());
-                });
+            final Map dsbPlans = (Map) ((Map) map.get("dsbPlans")).values().iterator().next();
+            tokenValues.put(prefix + "Urn", dsbPlans.get("name").toString());
+            final Map plan = (Map) ((List) dsbPlans.get("plans")).get(0);
+            tokenValues.put(prefix + "Plan", plan.get("id").toString());
+            tokenValues.put(prefix + "Protocol", ((List) plan.get("protocols")).get(0).toString());
+        });
     }
 
     protected void doGetAndValidateJson(String url, String jsonResourcePath, final Map<String, String> tokens) {

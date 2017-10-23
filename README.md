@@ -61,7 +61,11 @@ $ cd deployer
 $ go run deployer.go deploy-site -local-cluster-ip=$(minikube ip) 
 ```
 
+Once the site has been deployed successfully, the deployer prints the hub webapp url.
+To login use the default user "admin" with password "nazgul"
+
 Use the `-cleanup=true` flag if you wish to redeploy to the same site.
+
 
 
 ## Contribution

@@ -208,7 +208,7 @@ public abstract class BaseScenario {
         int attempt = 0;
         String state = null;
 
-        int maxRetries = 20;
+        int maxRetries = 100;
         while (attempt < maxRetries) {
             Map stateMap = doGet("hub-web-api/app-instance/" + appInstanceId + "/state", Map.class,
                     (response, value) -> Assert.assertEquals("Failed getting app instance status",

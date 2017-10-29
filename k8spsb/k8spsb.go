@@ -609,7 +609,7 @@ func deployApp(w http.ResponseWriter, r *http.Request) *deployError {
 		rc.Labels["nazKind"] = "app"
 		rc.Spec = spec
 
-		_, err = kClient.CreateReplicationController(rc, false)
+		_, err = kClient.DeployReplicationController(appUniqueName, rc, false)
 		if err != nil {
 			return &deployError{httpStatusCode: http.StatusInternalServerError, message: err.Error()}
 		}

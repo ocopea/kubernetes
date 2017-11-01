@@ -66,7 +66,9 @@ To login use the default user "admin" with password "nazgul"
 
 Use the `-cleanup=true` flag if you wish to redeploy to the same site.
 
+## Kubernetes User Guides
 
+* [Add your own app](docs/add-your-app.md)
 
 ## Contribution
 

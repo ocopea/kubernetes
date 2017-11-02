@@ -12,7 +12,7 @@ For more info visit the [Ocopea website](https://ocopea.github.io).
 # How to run
 
 K8spsb is automatically deployed every time you run the 
-[Kubernetes deployer](https://github.com/ocopea/kubernetes/tree/master/deployer)
+[Kubernetes deployer](https://github.com/ocopea/kubernetes)
 
 For purposes of running integration tests, it is possible to deploy k8spsb as a
 standalone deployment using the `deploy-k8spsb` command.

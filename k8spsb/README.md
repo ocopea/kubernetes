@@ -6,18 +6,18 @@ For more info visit the [Ocopea website](https://ocopea.github.io).
 
 # How to build
 
-* clone the kubernetes repo under GOPATH/src/ocopea/
-* run the `buildImage.sh` script from the k8spsb folder
+* Clone the kubernetes repo under GOPATH/src/ocopea/
+* Run the `buildImage.sh` script from the k8spsb folder
 
 # How to run
 
-k8spsb is being automatically deployed every time you run the 
+K8spsb is automatically deployed every time you run the 
 [Kubernetes deployer](https://github.com/ocopea/kubernetes)
 
-For running integration tests purpose it is possible to deploy k8spsb as a standalone deployment using
-using the `deploy-k8spsb` command.
+For purposes of running integration tests, it is possible to deploy k8spsb as a
+standalone deployment using the `deploy-k8spsb` command.
 When doing so, it is recommended to deploy to a separate namespace.
-for example for running the dsb on minikube into a "testing" namespace:
+For example, to run on minikube in a "testing" namespace:
 
 ```
 $ go run deployer.go deploy-k8spsb -namespace=testing -local-cluster-ip=$(minikube ip)
@@ -31,5 +31,6 @@ In order to run the unit tests simply use:
 $ go test
 ```
 
-to run the end-to-end and functional tests see the 
-[testing project](https://github.com/ocopea/kubernetes/tree/add-psb-ut/tests)
+To run the end-to-end and functional tests, see the 
+[Ocopea Kubernetes testing project](https://github.com/ocopea/kubernetes/tree/master/tests).
+

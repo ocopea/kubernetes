@@ -11,7 +11,7 @@ automated tests are two of the most common tasks our rich API and UI offers.
 
 **Learn More**
 
-* [Ocopea use cases](https://ocopea.github.io).
+* [Ocopea use cases](https://ocopea.github.io/use-cases.html)
 
 ## Installation
 
@@ -61,7 +61,7 @@ $ cd deployer
 $ go run deployer.go deploy-site -local-cluster-ip=$(minikube ip) 
 ```
 
-Once the site has been deployed successfully, the deployer prints the hub webapp url.
+Once the site has been deployed successfully, the deployer prints the Hub webapp URL.
 To login use the default user "admin" with password "nazgul"
 
 Use the `-cleanup=true` flag if you wish to redeploy to the same site.
@@ -72,8 +72,8 @@ Use the `-cleanup=true` flag if you wish to redeploy to the same site.
 
 ## Contribution
 
-* [Contributing to Ocopea](https://github.com/ocopea/documentation/docs/contributing.md)
-* [Ocopea Developer Guidelines](https://github.com/ocopea/documentation/docs/guidelines.md)
+* [Contributing to Ocopea](https://github.com/ocopea/documentation/blob/master/docs/contributing.md)
+* [Ocopea Developer Guidelines](https://github.com/ocopea/documentation/blob/master/docs/guidelines.md)
 
 ## Quality
 

@@ -68,6 +68,8 @@ Use the `-cleanup=true` flag if you wish to redeploy to the same site.
 
 ## Kubernetes User Guides
 
+* [Add your own app](docs/add-your-app.md)
+
 ## Contribution
 
 * [Contributing to Ocopea](https://github.com/ocopea/documentation/blob/master/docs/contributing.md)

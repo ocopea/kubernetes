@@ -7,7 +7,7 @@ The hub-web component is running as part of the ocopea orcs docker image and can
 
 Use kubectl client to find the orcs service address
 ```
-kubectl describe svc orcs
+kubectl describe svc orcs --namespace=ocopea
 ```
 
 In case you are using local deployment, the port will be the exposed service "NodePort", otherwise it will be port 80.

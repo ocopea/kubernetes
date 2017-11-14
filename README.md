@@ -62,7 +62,7 @@ $ go run deployer.go deploy-site -local-cluster-ip=$(minikube ip)
 ```
 
 Once the site has been deployed successfully, the deployer prints the Hub webapp URL.
-To login use the default user "admin" with password "nazgul"
+To login use the default user `admin` with password `nazgul`.
 
 Use the `-cleanup=true` flag if you wish to redeploy to the same site.
 
@@ -82,25 +82,3 @@ Every pull request must pass the full tests of this repository.
 1. All go code must be formatted with `gofmt`
 2. All repository tests must pass. See more information regarding how to run the tests 
 [here](https://github.com/ocopea/kubernetes/tree/master/tests).
-
-
-
-## Licensing
-
-**{code} does not provide legal guidance on which open source license should be used in projects. 
-We do expect that all projects and contributions will have a valid open source license within the repo/project, 
-or align to the appropriate license for the project/contribution.** The default license used for {code} Projects 
-is the [MIT License](http://codedellemc.com/sampledocs/LICENSE "LICENSE").
-
-Ocopea Kubernetes extension is freely distributed under the 
-[MIT License](http://emccode.github.io/sampledocs/LICENSE "LICENSE"). See LICENSE for details.
-
-
-## Support
-
-Please file bugs and issues on the Github issues page for this project. 
-This is to help keep track and document everything related to this repo. 
-For general discussions and further support you can join the 
-[{code} Community slack channel](http://community.codedellemc.com/). 
-The code and documentation are released with no warranties or SLAs and are intended to be supported 
-through a community driven process.

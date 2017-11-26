@@ -37,9 +37,10 @@ type deployServiceInfo struct {
 }
 
 type deploySiteArgsBag struct {
-	siteName           *string
-	cleanup            *bool
-	verboseSiteLogging *bool
+	siteName                  *string
+	cleanup                   *bool
+	verboseSiteLogging        *bool
+	customPostgresServiceName *string
 }
 
 type deployServiceArgsBag struct {
@@ -395,10 +396,8 @@ func deploySiteCommandExecutor(ctx *cmd.DeployerContext) error {
 		return errors.New("Failed creating namespace " + err.Error())
 	}
 
-	// First we deploy an empty postgres used to store site data
-	// todo: allow attaching to existing postgres (e.g. RDS pg)
-	fmt.Println("Deploying postgres database onto the cluster to be used by the site")
-	pgService, err := deployPostgres(ctx)
+	// Attaching a pg service
+	pgService, err := attachPostgresDatabase(ctx)
 	if err != nil {
 		return err
 	}
@@ -506,7 +505,36 @@ func buildServiceRootUrl(svc *v1.Service, ctx *cmd.DeployerContext) (string, err
 	} else {
 		return "", fmt.Errorf("Unsupported service type returned for orcs service %s\n", svc.Spec.Type)
 	}
+}
 
+func attachPostgresDatabase(ctx *cmd.DeployerContext) (*v1.Service, error) {
+
+	// Checking if customer provided it's own custom PG service
+	if *deploySiteArgs.customPostgresServiceName == "" {
+
+		// Deploying a postgres service ourselves
+		fmt.Println("Deploying postgres database onto the cluster to be used by the site")
+
+		return deployPostgres(ctx)
+	} else {
+		// Using customer provided postgres service
+
+		fmt.Printf("Using customer provided postgres database %s\n", *deploySiteArgs.customPostgresServiceName)
+		pgService, err := ctx.Client.GetServiceInfo(*deploySiteArgs.customPostgresServiceName)
+		if err != nil {
+			return nil, err
+		}
+		if len(pgService.Spec.Ports) == 0 {
+			return nil, fmt.Errorf("Customer provided PG service  %s did not specify PG port",
+				*deploySiteArgs.customPostgresServiceName)
+		} else {
+			fmt.Printf("Found customer provided postgres database %s, on port %d\n",
+				*deploySiteArgs.customPostgresServiceName,
+				pgService.Spec.Ports[0].Port,
+			)
+		}
+		return pgService, nil
+	}
 }
 
 func createOrcsServicesConfiguration(
@@ -1123,9 +1151,10 @@ func defineDeploySiteCommand() *cmd.DeployerCommand {
 	cmd.FlagSet = flag.NewFlagSet(cmd.Name, flag.ExitOnError)
 
 	deploySiteArgs = &deploySiteArgsBag{
-		siteName:           cmd.FlagSet.String("site-name", "", "Site Name"),
-		cleanup:            cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
-		verboseSiteLogging: cmd.FlagSet.Bool("verbose-site-logging", false, "Make the site logging verbose"),
+		siteName:                  cmd.FlagSet.String("site-name", "", "Site Name"),
+		cleanup:                   cmd.FlagSet.Bool("cleanup", false, "Cleanup Namespace before deploying"),
+		verboseSiteLogging:        cmd.FlagSet.Bool("verbose-site-logging", false, "Make the site logging verbose"),
+		customPostgresServiceName: cmd.FlagSet.String("custom-pg-service", "", "Customer provided PG service"),
 	}
 	return cmd
 }

@@ -66,6 +66,12 @@ To login use the default user `admin` with password `nazgul`.
 
 Use the `-cleanup=true` flag if you wish to redeploy to the same site.
 
+The Ocopea site requires a postgres service in order to store it's own metadata. the `deploy-site` command will deploy
+a postgres service within the same kubernetes namespace ocopea site is being deployed. In case you want Ocopea to use
+a different postgres instance make sure you have a kubernetes Service in the target namespace for that postgres instance
+and use the `-custom-pg-service=[customPGServiceName]` when running the `deploy-site` command
+
+
 ## Kubernetes User Guides
 
 * [Add your own app](docs/add-your-app.md)

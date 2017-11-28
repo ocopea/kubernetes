@@ -116,6 +116,8 @@ func (c *Client) CheckServiceExists(serviceName string) (bool, error) {
 func isEntityTypeNamespaceLevel(entityTypeName string) bool {
 	switch entityTypeName {
 	case "namespaces":
+		fallthrough
+	case "persistentvolumes":
 		return false
 	default:
 		return true
